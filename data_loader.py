@@ -35,7 +35,7 @@ class MSCOCO(torch.utils.data.Dataset):
         image_id = caption_and_imageid['image_id']
         image_path = os.path.join(self.image_dir, self.coco.loadImgs(image_id)[0]['file_name'])
 
-        image = Image.open(image_path)
+        image = Image.open(image_path).convert('RGB')
         image = self.transform(image)
 
         return image, caption
