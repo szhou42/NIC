@@ -4,9 +4,8 @@ Created in Oct 2018
 
 """
 
-import numpy as np
-
 import torch
+import numpy as np
 
 
 def save_model(epoch, time_used_global, optimizer, encoder, decoder):
@@ -27,4 +26,13 @@ def load_model(model_dir, model_list):
     return lastest_state
 
 
+def tokenize_captions(captions):
+    return captions
 
+
+def beam_search():
+    pass
+
+
+def metrics():
+    pass

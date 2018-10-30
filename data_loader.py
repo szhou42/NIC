@@ -2,50 +2,43 @@
 """
 Created in Oct 2018
 
-@author: msq96
 """
 
 
 import os
-import itertools
 from PIL import Image
+from utils import tokenize_captions
+from pycocotools.coco import COCO
 
 import torch
-import torchvision.transforms as transforms
 
-
-image_dir = '../val2017'
-images = os.listdir(image_dir)
-image_paths = list(map(os.path.join, itertools.repeat(image_dir), images))
-
-
-transform_train = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ColorJitter(
-            brightness=0.1*torch.randn(1),
-            contrast=0.1*torch.randn(1),
-            saturation=0.1*torch.randn(1),
-            hue=0.1*torch.randn(1)),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-])
-
-transform_val = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-])
 
 class MSCOCO(torch.utils.data.Dataset):
-    def __init__(self):
-        pass
+
+    def __init__(self, transform, val_caption_file, image_dir):
+        self.image_dir = image_dir
         
-    def __getitem__(self, index):      
-        image = None
-        caption = None
+        self.coco = COCO(val_caption_file)
         
+        captions = self.coco.anns
+        # need to tokenize all captions here
+        self.captions = tokenize_captions(captions)
+        self.caption_ids = list(captions.keys())
+
+        self.transform = transform
+
+    def __getitem__(self, index):  
+        caption_id = self.caption_ids[index]
+        caption_and_imageid = self.captions[caption_id]
+        
+        caption = caption_and_imageid['caption']
+        image_id = caption_and_imageid['image_id']
+        image_path = os.path.join(self.image_dir, self.coco.loadImgs(image_id)[0]['file_name'])
+
+        image = Image.open(image_path)
+        image = self.transform(image)
+
         return image, caption
     
     def __len__(self):
-        return len()
+        return len(self.caption_ids)

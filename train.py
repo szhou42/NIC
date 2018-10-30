@@ -9,6 +9,7 @@ import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torchvision import transforms
 
 from models import CNN, RNN
 from utils import save_model, load_model
@@ -19,23 +20,53 @@ DEBUG = True
 #DEBUG = False
 
 NO_WORD_EMBEDDINGS = 300
+VOCAB_SIZE = 20000
+HIDDEN_SIZE = 1000
 BATCH_SIZE = 128
+NUM_LAYERS = 1
 EPOCHS = 500
 LR = 0.0001
 #MOMENTUM = 0.9 # if SGD
 current_epoch = 1
 time_used_global = 0.0
-model_dir = '../saved_model/'
-image_dir = '../data/'
-pre_train_dir = '../pre_train/'
 checkpoint = 5
 
+model_dir = '../saved_model/'
+train_image_dir = '../data/train2017/'
+val_image_dir = '../data/val2017/'
+train_caption_file = '../data/annotations/captions_train2017.json'
+val_caption_file = '../data/annotations/captions_val2017.json'
+pretrained_resnet101_file = '../pre_trained/resnet101-5d3b4d8f.pth'
+pretrained_word_embeddings_file = '../pre_trained/glove.840B.300d.txt' # need to turn it into pytorch.tensor type beforehand.
 
-trainloader = torch.utils.data.DataLoader()
-valloader = torch.utils.data.DataLoader()
 
-encoder = CNN()
-decoder = RNN()
+transform_train = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ColorJitter(
+            brightness=0.1*torch.randn(1),
+            contrast=0.1*torch.randn(1),
+            saturation=0.1*torch.randn(1),
+            hue=0.1*torch.randn(1)),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+])
+
+transform_val = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+])
+
+trainset = MSCOCO(transform_train, train_caption_file, train_image_dir)
+trainloader = torch.utils.data.DataLoader(dataset=trainset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
+
+valset = MSCOCO(transform_val, val_caption_file, val_image_dir)
+valloader = torch.utils.data.DataLoader(dataset=valset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
+
+encoder = CNN(NO_WORD_EMBEDDINGS, pretrained_resnet101_file, freeze=True)
+decoder = RNN(VOCAB_SIZE, NO_WORD_EMBEDDINGS, hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS,
+              dropout=0.5, pre_trained_file=pretrained_word_embeddings_file, freeze=True)
 encoder.cuda()
 decoder.cuda()
 
