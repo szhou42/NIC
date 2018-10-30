@@ -5,32 +5,31 @@ Created in Oct 2018
 """
 import os
 import time
-import numpy as np
 
 import torch
 import torch.nn as nn
-import torchvision
-import torchvision.transforms as transforms
 import torch.optim as optim
 
 from models import CNN, RNN
 from utils import save_model, load_model
+from data_loader import MSCOCO
 
 
 DEBUG = True
 #DEBUG = False
 
+NO_WORD_EMBEDDINGS = 300
 BATCH_SIZE = 128
 EPOCHS = 500
 LR = 0.0001
-#momentum = 0.9 # if SGD
+#MOMENTUM = 0.9 # if SGD
 current_epoch = 1
 time_used_global = 0.0
-model_dir = './saved_model/'
+model_dir = '../saved_model/'
+image_dir = '../data/'
+pre_train_dir = '../pre_train/'
 checkpoint = 5
 
-
-transform = transforms.Compose([])
 
 trainloader = torch.utils.data.DataLoader()
 valloader = torch.utils.data.DataLoader()
@@ -41,8 +40,9 @@ encoder.cuda()
 decoder.cuda()
 
 model_paras = list(encoder.parameters()) + list(RNN.parameters())
-#optimizer = optim.SGD(model_paras, lr=LR, momentum=momentum)
+#optimizer = optim.SGD(model_paras, lr=LR, momentum=MOMENTUM)
 optimizer = optim.Adam(model_paras, lr=LR)
+
 
 # load lastest model to resume training
 model_list = os.listdir(model_dir)
@@ -84,17 +84,4 @@ for epoch in range(current_epoch, EPOCHS+1):
             break
 
     if DEBUG:
-        break
-
-
-
-
-
-
-
-
-
-
-
-
-        
+        break        

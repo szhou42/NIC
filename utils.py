@@ -19,6 +19,7 @@ def save_model(epoch, time_used_global, optimizer, encoder, decoder):
             }
    torch.save(state, open('model_'+str(epoch)+'.pth', 'wb'))
 
+
 def load_model(model_dir, model_list):
     lastest_model_idx = np.argmax([int(each_model.split('_')[1][:-4]) for each_model in model_list])
     lastest_model = model_dir + model_list[lastest_model_idx]
