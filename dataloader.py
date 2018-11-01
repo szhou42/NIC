@@ -15,10 +15,10 @@ import torch
 
 class MSCOCO(torch.utils.data.Dataset):
 
-    def __init__(self, transform, val_caption_file, image_dir):
+    def __init__(self, transform, caption_file, image_dir):
         self.image_dir = image_dir
         
-        self.coco = COCO(val_caption_file)
+        self.coco = COCO(caption_file)
         
         captions = self.coco.anns
         # need to tokenize all captions here

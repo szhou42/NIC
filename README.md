@@ -7,5 +7,5 @@ This repo is to implement the show and tell paper.
 	* beam_search()
 	* metrics()
 * Debug
-* tune hyperparameters
+* Tune hyperparameters
 
