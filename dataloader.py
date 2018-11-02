@@ -5,35 +5,28 @@ Created in Oct 2018
 """
 
 
-import os
+import pickle
 from PIL import Image
-from utils import tokenize_captions
-from pycocotools.coco import COCO
 
 import torch
 
 
 class MSCOCO(torch.utils.data.Dataset):
 
-    def __init__(self, transform, caption_file, image_dir):
-        self.image_dir = image_dir
+    def __init__(self, imagepaths_and_captions, transform):
         
-        self.coco = COCO(caption_file)
+        self.imagepaths_captions = pickle.load(open(imagepaths_and_captions, 'rb'))
         
-        captions = self.coco.anns
-        # need to tokenize all captions here
-        self.captions = tokenize_captions(captions)
-        self.caption_ids = list(captions.keys())
+        self.caption_ids = list(self.imagepaths_captions.keys())
 
         self.transform = transform
 
     def __getitem__(self, index):  
         caption_id = self.caption_ids[index]
-        caption_and_imageid = self.captions[caption_id]
         
-        caption = caption_and_imageid['caption']
-        image_id = caption_and_imageid['image_id']
-        image_path = os.path.join(self.image_dir, self.coco.loadImgs(image_id)[0]['file_name'])
+        imagepath_and_caption = self.imagepaths_captions[caption_id]
+        image_path = imagepath_and_caption['image_path']
+        caption = imagepath_and_caption['caption']
 
         image = Image.open(image_path).convert('RGB')
         image = self.transform(image)

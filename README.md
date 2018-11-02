@@ -1,11 +1,12 @@
-# Show-and-tell
-This repo is to implement the show and tell paper.
+# Show and tell
+This repo is to reimplement the show and tell paper.
 
 # To Do
+* Revise the RNN model.
 * Finish three functions in utils.py.
-	* tokenize_captions()
 	* beam_search()
 	* metrics()
-* Debug
-* Tune hyperparameters
+* Debug.
+* Tune hyperparameters.
+* Train two weeks!
 
