@@ -11,22 +11,23 @@ import numpy as np
 
 import torch
 import torch.nn as nn
+import torch.nn.utils.rnn as rnn_utils
 import torch.optim as optim
 from torchvision import transforms
 
 from models import CNN, RNN
 from utils import save_model, load_model, decode_idx2word
-from dataloader import MSCOCO
+from dataloader import MSCOCO, collate_fn
 
 
-DEBUG = True
-#DEBUG = False
+#DEBUG = True
+DEBUG = False
 
 NO_WORD_EMBEDDINGS = 300
 VOCAB_SIZE = 17000
-HIDDEN_SIZE = 1000
-BATCH_SIZE = 128
-NUM_LAYERS = 2
+HIDDEN_SIZE = 512
+BATCH_SIZE = 32
+NUM_LAYERS = 1
 EPOCHS = 500
 LR = 0.0001
 #MOMENTUM = 0.9 # if SGD
@@ -51,24 +52,24 @@ transform_train = transforms.Compose([
             hue=0.1*torch.randn(1)),
     transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
-#    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) # need to calculate true mean and std to apply z-score normalizaiton.
+    transforms.Normalize([0.4701, 0.4469, 0.4076], [0.2692, 0.2646, 0.2801])
 ])
 
 transform_val = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
-#    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) # need to calculate true mean and std to apply z-score normalizaiton.
+    transforms.Normalize([0.4701, 0.4469, 0.4076], [0.2692, 0.2646, 0.2801])
 ])
 
 trainset = MSCOCO(train_imagepaths_and_captions, transform_train)
-trainloader = torch.utils.data.DataLoader(dataset=trainset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
+trainloader = torch.utils.data.DataLoader(dataset=trainset, batch_size=BATCH_SIZE, collate_fn=collate_fn, shuffle=True, num_workers=0)
 
 valset = MSCOCO(val_imagepaths_and_captions, transform_val)
-valloader = torch.utils.data.DataLoader(dataset=valset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
+valloader = torch.utils.data.DataLoader(dataset=valset, batch_size=BATCH_SIZE, collate_fn=collate_fn, shuffle=True, num_workers=0)
 
-encoder = CNN(NO_WORD_EMBEDDINGS, pretrained_resnet101_file, freeze=True)
-decoder = RNN(VOCAB_SIZE, NO_WORD_EMBEDDINGS, hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS,
-              dropout=0.5, pre_trained_file=pretrained_word_embeddings_file, freeze=True)
+encoder = CNN(BATCH_SIZE, NO_WORD_EMBEDDINGS, pretrained_resnet101_file, freeze=True)
+decoder = RNN(BATCH_SIZE, VOCAB_SIZE, NO_WORD_EMBEDDINGS, hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS,
+              pre_trained_file=pretrained_word_embeddings_file, freeze=True)
 encoder.cuda()
 decoder.cuda()
 
@@ -94,27 +95,36 @@ for epoch in range(current_epoch, EPOCHS+1):
     encoder.train()
     decoder.train()
     
-    for batch_idx, (images, captions) in enumerate(trainloader, 1):
+    for batch_idx, (images, captions, lengths) in enumerate(trainloader, 1):
         
         images = images.cuda()
         captions = captions.cuda()
+        lengths = lengths.cuda()
+        targets = rnn_utils.pack_padded_sequence(captions, lengths, batch_first=True)[0]
         
         encoder.zero_grad()
         decoder.zero_grad()
         
         image_embeddings = encoder(images)
-        generated_captions = decoder(image_embeddings, captions)
+        generated_captions = decoder(image_embeddings, captions, lengths)
+
+        loss = criterion(generated_captions, targets)
         
-        loss = criterion(generated_captions, captions)
+        loss.backward()
+        optimizer.step()
+        
+        if batch_idx % 100 == 0:
+            print('[%d] batch, [%.4f] loss, [%.2f] min used.'%(batch_idx, loss, (time.time()-start_time_epoch)/60))
+
+        if DEBUG:
+            break
+        
         
     time_used_epoch = time.time() - start_time_epoch
     time_used_global += time_used_epoch
     
     if epoch % checkpoint == 0:
         save_model(epoch, time_used_global, optimizer, encoder, decoder)
-
-        if DEBUG:
-            break
 
     if DEBUG:
         break        

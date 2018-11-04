@@ -25,6 +25,7 @@ def load_model(model_dir, model_list):
     lastest_state = torch.load(open(lastest_model, 'rb'))
     return lastest_state
 
+
 def decode_idx2word(idx_seq, id2word):
     return id2word[idx_seq]
 

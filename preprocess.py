@@ -5,20 +5,21 @@ Created in Oct 2018
 """
 
 import os
+import nltk
 import pickle
 import itertools
-
-import nltk
 import numpy as np
+from PIL import Image
+
+import torch
+from torchvision import transforms
+
 from pycocotools.coco import COCO
 
 vocab_size = 17000
 
-#caption_file = '../data/annotations/captions_train2017.json'
-caption_file = '../data/annotations/captions_val2017.json'
-
-#image_dir = '../data/train2017'
-image_dir = '../data/val2017'
+caption_file, image_dir = ['../data/annotations/captions_train2017.json', '../data/train2017']
+#caption_file, image_dir = ['../data/annotations/captions_val2017.json', '../data/val2017']
 
 GloVe_embeddings_file = '../pre_trained/glove.840B.300d.txt'
 
@@ -37,7 +38,7 @@ elif 'val' in caption_file:
 imagepaths_captions = '../preprocessed_data/imagepaths_captions'
 imagepaths_captions = imagepaths_captions + postfix
 
-# without the use of pretrained word embeddings, for future use. No need to run again.
+# Preprocess data.
 def preprocess(caption_file, vocab_size):
 
     coco = COCO(caption_file)
@@ -167,6 +168,44 @@ def process_captions(caption_file):
 
         caption = nltk.word_tokenize(captions[key]['caption'])
         caption = [each.lower() for each in caption]
-        captions[key]['caption'] = [word2idx.get(word, word2idx['UNK']) for word in caption]
-    
+        captions[key]['caption'] = torch.LongTensor([word2idx.get(word, word2idx['UNK']) for word in caption])
+
     pickle.dump(captions, open(imagepaths_captions, 'wb'))
+    
+
+def cal_mean_std(image_dir):
+    image_paths = os.listdir(image_dir)
+
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor()
+    ])
+    
+    summation = torch.tensor([0.0, 0.0, 0.0])
+    for count, image_name in enumerate(image_paths, 1):
+        image_path = os.path.join(image_dir, image_name)
+        image = Image.open(image_path).convert('RGB')
+        image = transform(image)
+        
+        summation += image.sum(dim=(1,2))
+        
+        if count % 1000 == 0:
+            print(count)
+    
+    mean = summation / (224*224) / count
+    mean = mean.reshape(3, 1, 1)
+
+    accumulator = torch.tensor([0.0, 0.0, 0.0])
+    for count, image_name in enumerate(image_paths, 1):
+        image_path = os.path.join(image_dir, image_name)
+        image = Image.open(image_path).convert('RGB')
+        image = transform(image)
+        
+        accumulator += ((image - mean)**2).sum(dim=(1, 2))
+        
+        if count % 1000 == 0:
+            print(count)
+
+    std = (accumulator / (224*224) / count)**0.5
+
+    return mean, std
