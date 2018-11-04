@@ -7,7 +7,8 @@ This repo is to reimplement the show and tell paper.
 		* [Github link](https://github.com/tensorflow/models/blob/master/research/im2txt/im2txt/inference_utils/caption_generator.py)
 	* metrics()
 		* [Github link](https://github.com/tylin/coco-caption/tree/master/pycocoevalcap)
-* Linux version.
+* Linux .sh and .pbs file.
+* Add logs.
 * Debug.
 * Tune hyperparameters.
 	* Data augmentation?
@@ -18,9 +19,12 @@ This repo is to reimplement the show and tell paper.
 		* [Pytorch forums](https://discuss.pytorch.org/t/proper-way-to-do-gradient-clipping/191/14)
 	* Which ResNet?
 	* Which RNN: LSTM? GRU?
-	* Freeze word embeddings?
+	* Word embeddings:
+		* Freeze?
 		* Embedding size?
 		* Vocabulary size?
+		* Start word?
+		* End word?
 	* RNN parameters?
 		* Hidden size?
 		* Number of layers?

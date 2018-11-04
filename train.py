@@ -30,6 +30,7 @@ BATCH_SIZE = 32
 NUM_LAYERS = 1
 EPOCHS = 500
 LR = 0.0001
+NUM_WORKERS = 0
 #MOMENTUM = 0.9 # if SGD
 current_epoch = 1
 time_used_global = 0.0
@@ -61,15 +62,17 @@ transform_val = transforms.Compose([
     transforms.Normalize([0.4701, 0.4469, 0.4076], [0.2692, 0.2646, 0.2801])
 ])
 
+print('Loading dataset...')
 trainset = MSCOCO(train_imagepaths_and_captions, transform_train)
-trainloader = torch.utils.data.DataLoader(dataset=trainset, batch_size=BATCH_SIZE, collate_fn=collate_fn, shuffle=True, num_workers=0)
+trainloader = torch.utils.data.DataLoader(dataset=trainset, batch_size=BATCH_SIZE, collate_fn=collate_fn, shuffle=True, num_workers=NUM_WORKERS)
 
 valset = MSCOCO(val_imagepaths_and_captions, transform_val)
-valloader = torch.utils.data.DataLoader(dataset=valset, batch_size=BATCH_SIZE, collate_fn=collate_fn, shuffle=True, num_workers=0)
+valloader = torch.utils.data.DataLoader(dataset=valset, batch_size=BATCH_SIZE, collate_fn=collate_fn, shuffle=True, num_workers=NUM_WORKERS)
 
+print('Initializing models...')
 encoder = CNN(BATCH_SIZE, NO_WORD_EMBEDDINGS, pretrained_resnet101_file, freeze=True)
 decoder = RNN(BATCH_SIZE, VOCAB_SIZE, NO_WORD_EMBEDDINGS, hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS,
-              pre_trained_file=pretrained_word_embeddings_file, freeze=True)
+              pre_trained_file=pretrained_word_embeddings_file, freeze=False)
 encoder.cuda()
 decoder.cuda()
 
@@ -95,6 +98,7 @@ for epoch in range(current_epoch, EPOCHS+1):
     encoder.train()
     decoder.train()
     
+    print('Start training...')
     for batch_idx, (images, captions, lengths) in enumerate(trainloader, 1):
         
         images = images.cuda()

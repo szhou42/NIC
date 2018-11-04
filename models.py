@@ -65,9 +65,9 @@ class RNN(nn.Module):
     def forward(self, image_embeddings, captions, lengths):
 
         word_embeddings = self.word_embeddings(captions)
-        
+
         all_embeddings = torch.cat((image_embeddings.view(self.batch_size, 1, -1), word_embeddings), dim=1)
-        
+
         inputs = rnn_utils.pack_padded_sequence(all_embeddings, lengths, batch_first=True)
         h_t, (h_n, c_n) = self.lstm(inputs)
 

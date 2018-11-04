@@ -18,8 +18,8 @@ from pycocotools.coco import COCO
 
 vocab_size = 17000
 
-caption_file, image_dir = ['../data/annotations/captions_train2017.json', '../data/train2017']
-#caption_file, image_dir = ['../data/annotations/captions_val2017.json', '../data/val2017']
+caption_file, image_dir = ['../data/annotations/captions_train2017.json', '../data/train2017/']
+caption_file, image_dir = ['../data/annotations/captions_val2017.json', '../data/val2017/']
 
 GloVe_embeddings_file = '../pre_trained/glove.840B.300d.txt'
 
@@ -163,7 +163,7 @@ def process_captions(caption_file):
 
     for key in captions.keys():
         image_id = captions[key]['image_id']
-        image_path = os.path.join(image_dir, coco.loadImgs(image_id)[0]['file_name'])
+        image_path = image_dir + coco.loadImgs(image_id)[0]['file_name']
         captions[key]['image_path'] = image_path
 
         caption = nltk.word_tokenize(captions[key]['caption'])
