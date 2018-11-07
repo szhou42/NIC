@@ -8,15 +8,16 @@ import torch
 import numpy as np
 
 
-def save_model(epoch, time_used_global, optimizer, encoder, decoder):
+def save_model(model_dir, epoch, batch_step_count, time_used_global, optimizer, encoder, decoder):
    state = {
             'epoch': epoch,
+            'batch_step_count': batch_step_count,
             'time_used_global': time_used_global,
             'optimizer': optimizer.state_dict(),
             'encoder': encoder.state_dict(),
             'decoder': decoder.state_dict()
             }
-   torch.save(state, open('model_'+str(epoch)+'.pth', 'wb'))
+   torch.save(state, open(model_dir + 'model_'+str(epoch)+'.pth', 'wb'))
 
 
 def load_model(model_dir, model_list):

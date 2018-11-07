@@ -7,7 +7,7 @@ This repo is to reimplement the show and tell paper.
 		* [Github link](https://github.com/tensorflow/models/blob/master/research/im2txt/im2txt/inference_utils/caption_generator.py)
 	* metrics()
 		* [Github link](https://github.com/tylin/coco-caption/tree/master/pycocoevalcap)
-* Linux .sh and .pbs file.
+* Linux .sh and .pbs file. [Check]
 * Add logs.
 * Debug.
 * Tune hyperparameters.
