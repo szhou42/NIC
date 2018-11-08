@@ -170,8 +170,8 @@ for epoch in range(current_epoch, EPOCHS+1):
 
 
     time_used_epoch = time.time() - start_time_epoch
-    time_used_global += time_used_epoch 
-    
+    time_used_global += time_used_epoch
+
 
     writer.add_scalar('epoch/training_loss', trainloss, epoch)
     writer.add_scalar('epoch/validation_loss', valloss, epoch)
