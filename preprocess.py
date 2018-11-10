@@ -5,20 +5,21 @@ Created in Oct 2018
 """
 
 import os
+import nltk
 import pickle
 import itertools
-
-import nltk
 import numpy as np
+from PIL import Image
+
+import torch
+from torchvision import transforms
+
 from pycocotools.coco import COCO
 
 vocab_size = 17000
 
-#caption_file = '../data/annotations/captions_train2017.json'
-caption_file = '../data/annotations/captions_val2017.json'
-
-#image_dir = '../data/train2017'
-image_dir = '../data/val2017'
+caption_file, image_dir = ['../data/annotations/captions_train2017.json', '../data/train2017/']
+#caption_file, image_dir = ['../data/annotations/captions_val2017.json', '../data/val2017/']
 
 GloVe_embeddings_file = '../pre_trained/glove.840B.300d.txt'
 
@@ -37,7 +38,7 @@ elif 'val' in caption_file:
 imagepaths_captions = '../preprocessed_data/imagepaths_captions'
 imagepaths_captions = imagepaths_captions + postfix
 
-# without the use of pretrained word embeddings, for future use. No need to run again.
+# Preprocess data.
 def preprocess(caption_file, vocab_size):
 
     coco = COCO(caption_file)
@@ -89,19 +90,20 @@ def preprocess(caption_file, vocab_size):
     idx2word_GloVe = all_words[:250000].copy()
     embeddings_GloVe = np.stack(all_embeddings[:250000])
 
-
-    word2idx = {'UNK': 0}
-    idx2word = ['UNK']
-    embeddings = np.zeros((vocab_size+1, embeddings_GloVe.shape[1]))
-    embeddings[0, :] = np.random.random((1, embeddings_GloVe.shape[1])) * 0.01
+    # introduce unknown word key, start word key and end word key.
+    word2idx = {'UNK': 0, 'STK': 1, 'EDK': 2}
+    idx2word = ['UNK', 'STK', 'EDK']
+    no_new_keys = 3
+    embeddings = np.zeros((vocab_size+no_new_keys, embeddings_GloVe.shape[1]))
+    embeddings[:no_new_keys, :] = np.random.random((no_new_keys, embeddings_GloVe.shape[1])) * 0.01
     
     count = 0
     unk_count = 0
     for word in idx2word_COCO:
         idx_GloVe = word2idx_GloVe.get(word)
         if idx_GloVe is not None:
-            embeddings[count+1, :] = embeddings_GloVe[idx_GloVe, :]
-            word2idx[word] = count+1
+            embeddings[count+no_new_keys, :] = embeddings_GloVe[idx_GloVe, :]
+            word2idx[word] = count+no_new_keys
             idx2word.append(word)
             count += 1
         else:
@@ -129,18 +131,19 @@ def generate_new_embeddings(caption_file, vocab_size):
     word2idx_GloVe = temp['word2idx_GloVe']
     embeddings_GloVe = pickle.load(open(GloVe_embeddings_matrix, 'rb'))
     
-    word2idx = {'UNK': 0}
-    idx2word = ['UNK']
-    embeddings = np.zeros((vocab_size+1, embeddings_GloVe.shape[1]))
-    embeddings[0, :] = np.random.random((1, embeddings_GloVe.shape[1])) * 0.01
+    word2idx = {'UNK': 0, 'STK': 1, 'EDK': 2}
+    idx2word = ['UNK', 'STK', 'EDK']
+    no_new_keys = 3
+    embeddings = np.zeros((vocab_size+no_new_keys, embeddings_GloVe.shape[1]))
+    embeddings[:no_new_keys, :] = np.random.random((no_new_keys, embeddings_GloVe.shape[1])) * 0.01
 
     count = 0
     unk_count = 0
     for word in idx2word_COCO:
         idx_GloVe = word2idx_GloVe.get(word)
         if idx_GloVe is not None:
-            embeddings[count+1, :] = embeddings_GloVe[idx_GloVe, :]
-            word2idx[word] = count+1
+            embeddings[count+no_new_keys, :] = embeddings_GloVe[idx_GloVe, :]
+            word2idx[word] = count+no_new_keys
             idx2word.append(word)
             count += 1
         else:
@@ -162,11 +165,53 @@ def process_captions(caption_file):
 
     for key in captions.keys():
         image_id = captions[key]['image_id']
-        image_path = os.path.join(image_dir, coco.loadImgs(image_id)[0]['file_name'])
+        image_path = image_dir + coco.loadImgs(image_id)[0]['file_name']
         captions[key]['image_path'] = image_path
 
         caption = nltk.word_tokenize(captions[key]['caption'])
         caption = [each.lower() for each in caption]
-        captions[key]['caption'] = [word2idx.get(word, word2idx['UNK']) for word in caption]
-    
+        caption.insert(0, 'STK')
+        caption.append('EDK')
+        captions[key]['caption'] = torch.LongTensor([word2idx.get(word, word2idx['UNK']) for word in caption])
+
     pickle.dump(captions, open(imagepaths_captions, 'wb'))
+    
+
+
+transform_val = transforms.Compose([
+    transforms.Resize((259, 259)),
+    transforms.CenterCrop((224, 224)),
+    transforms.ToTensor()
+])
+
+def cal_mean_std(image_dir, transform=transform_val):
+    image_paths = os.listdir(image_dir)
+    
+    summation = torch.tensor([0.0, 0.0, 0.0])
+    for count, image_name in enumerate(image_paths, 1):
+        image_path = os.path.join(image_dir, image_name)
+        image = Image.open(image_path).convert('RGB')
+        image = transform(image)
+        
+        summation += image.sum(dim=(1,2))
+        
+        if count % 1000 == 0:
+            print(count)
+    
+    mean = summation / (224*224) / count
+    mean = mean.reshape(3, 1, 1)
+
+    accumulator = torch.tensor([0.0, 0.0, 0.0])
+    for count, image_name in enumerate(image_paths, 1):
+        image_path = os.path.join(image_dir, image_name)
+        image = Image.open(image_path).convert('RGB')
+        image = transform(image)
+        
+        accumulator += ((image - mean)**2).sum(dim=(1, 2))
+        
+        if count % 1000 == 0:
+            print(count)
+
+    std = (accumulator / (224*224) / count)**0.5
+
+    return mean, std

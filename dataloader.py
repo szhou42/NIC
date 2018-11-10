@@ -9,6 +9,18 @@ import pickle
 from PIL import Image
 
 import torch
+import torch.nn.utils.rnn as rnn_utils
+
+
+def collate_fn(batch):
+    batch.sort(key=lambda image_caption: len(image_caption[1]), reverse=True)
+    images, captions = zip(*batch)
+    
+    images = torch.stack(images)
+    lengths = torch.tensor([each_caption.size()[0] for each_caption in captions])
+    captions = rnn_utils.pad_sequence(captions, batch_first=True, padding_value=0)
+
+    return images, captions, lengths
 
 
 class MSCOCO(torch.utils.data.Dataset):
