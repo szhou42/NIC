@@ -2,14 +2,12 @@
 This repo is to reimplement the show and tell paper.
 
 # To Do
-* Finish two functions/classes in utils.py.
-	* beam_search()
+* Finish two functions:
+	* models.RNN.beam_search()
 		* [Github link](https://github.com/tensorflow/models/blob/master/research/im2txt/im2txt/inference_utils/caption_generator.py)
-	* metrics()
+	* utils.metrics()
 		* [Github link](https://github.com/tylin/coco-caption/tree/master/pycocoevalcap)
-* Linux .sh and .pbs file. [Check]
-* Add logs.
-* Debug.
+	* utils.save_images_and_captions()
 * Tune hyperparameters.
 	* Data augmentation?
 	* Optimizer, learning rate, weight decay?
