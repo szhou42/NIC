@@ -19,7 +19,7 @@ from pycocotools.coco import COCO
 vocab_size = 17000
 
 caption_file, image_dir = ['../data/annotations/captions_train2017.json', '../data/train2017/']
-caption_file, image_dir = ['../data/annotations/captions_val2017.json', '../data/val2017/']
+#caption_file, image_dir = ['../data/annotations/captions_val2017.json', '../data/val2017/']
 
 GloVe_embeddings_file = '../pre_trained/glove.840B.300d.txt'
 
@@ -90,19 +90,20 @@ def preprocess(caption_file, vocab_size):
     idx2word_GloVe = all_words[:250000].copy()
     embeddings_GloVe = np.stack(all_embeddings[:250000])
 
-
-    word2idx = {'UNK': 0}
-    idx2word = ['UNK']
-    embeddings = np.zeros((vocab_size+1, embeddings_GloVe.shape[1]))
-    embeddings[0, :] = np.random.random((1, embeddings_GloVe.shape[1])) * 0.01
+    # introduce unknown word key, start word key and end word key.
+    word2idx = {'UNK': 0, 'STK': 1, 'EDK': 2}
+    idx2word = ['UNK', 'STK', 'EDK']
+    no_new_keys = 3
+    embeddings = np.zeros((vocab_size+no_new_keys, embeddings_GloVe.shape[1]))
+    embeddings[:no_new_keys, :] = np.random.random((no_new_keys, embeddings_GloVe.shape[1])) * 0.01
     
     count = 0
     unk_count = 0
     for word in idx2word_COCO:
         idx_GloVe = word2idx_GloVe.get(word)
         if idx_GloVe is not None:
-            embeddings[count+1, :] = embeddings_GloVe[idx_GloVe, :]
-            word2idx[word] = count+1
+            embeddings[count+no_new_keys, :] = embeddings_GloVe[idx_GloVe, :]
+            word2idx[word] = count+no_new_keys
             idx2word.append(word)
             count += 1
         else:
@@ -130,18 +131,19 @@ def generate_new_embeddings(caption_file, vocab_size):
     word2idx_GloVe = temp['word2idx_GloVe']
     embeddings_GloVe = pickle.load(open(GloVe_embeddings_matrix, 'rb'))
     
-    word2idx = {'UNK': 0}
-    idx2word = ['UNK']
-    embeddings = np.zeros((vocab_size+1, embeddings_GloVe.shape[1]))
-    embeddings[0, :] = np.random.random((1, embeddings_GloVe.shape[1])) * 0.01
+    word2idx = {'UNK': 0, 'STK': 1, 'EDK': 2}
+    idx2word = ['UNK', 'STK', 'EDK']
+    no_new_keys = 3
+    embeddings = np.zeros((vocab_size+no_new_keys, embeddings_GloVe.shape[1]))
+    embeddings[:no_new_keys, :] = np.random.random((no_new_keys, embeddings_GloVe.shape[1])) * 0.01
 
     count = 0
     unk_count = 0
     for word in idx2word_COCO:
         idx_GloVe = word2idx_GloVe.get(word)
         if idx_GloVe is not None:
-            embeddings[count+1, :] = embeddings_GloVe[idx_GloVe, :]
-            word2idx[word] = count+1
+            embeddings[count+no_new_keys, :] = embeddings_GloVe[idx_GloVe, :]
+            word2idx[word] = count+no_new_keys
             idx2word.append(word)
             count += 1
         else:
@@ -168,18 +170,22 @@ def process_captions(caption_file):
 
         caption = nltk.word_tokenize(captions[key]['caption'])
         caption = [each.lower() for each in caption]
+        caption.insert(0, 'STK')
+        caption.append('EDK')
         captions[key]['caption'] = torch.LongTensor([word2idx.get(word, word2idx['UNK']) for word in caption])
 
     pickle.dump(captions, open(imagepaths_captions, 'wb'))
     
 
-def cal_mean_std(image_dir):
-    image_paths = os.listdir(image_dir)
 
-    transform = transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.ToTensor()
-    ])
+transform_val = transforms.Compose([
+    transforms.Resize((346, 346)),
+    transforms.CenterCrop((224, 224)),
+    transforms.ToTensor()
+])
+
+def cal_mean_std(image_dir, transform=transform_val):
+    image_paths = os.listdir(image_dir)
     
     summation = torch.tensor([0.0, 0.0, 0.0])
     for count, image_name in enumerate(image_paths, 1):

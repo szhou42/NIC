@@ -49,6 +49,7 @@ class RNN(nn.Module):
         super(RNN, self).__init__()
         
         self.batch_size = batch_size
+        self.id2word = np.array(pickle.load(open('../preprocessed_data/idx2word', 'rb')))
 
         pretrained_word_embeddings = torch.from_numpy(pickle.load(open(pre_trained_file, 'rb')).astype(np.float32)).cuda()
         self.word_embeddings = nn.Embedding.from_pretrained(pretrained_word_embeddings, freeze)
@@ -61,6 +62,9 @@ class RNN(nn.Module):
         )
         
         self.fc_output = nn.Linear(hidden_size, vocab_size)
+
+    def decode_idx2word(self, idx_seq):
+        return self.id2word[idx_seq]
     
     def forward(self, image_embeddings, captions, lengths):
 
@@ -74,9 +78,34 @@ class RNN(nn.Module):
         output = self.fc_output(h_t[0])
         return output
 
+    def greedy_generator(self, image_embeddings, max_caption_length=20, STKidx=1, EDKidx=2):
 
+        _, (h_0, c_0) = self.lstm(image_embeddings.view(self.batch_size, 1, -1)) # 1 x batch_size x hidden_size
+        output_captions_one_batch = []
+        for image_idx in range(self.batch_size):
 
+            h_image_idx = h_0[:, [image_idx], :]
+            c_image_idx = c_0[:, [image_idx], :]
+            word_embeddings_image_idx = self.word_embeddings(torch.tensor(STKidx).cuda()).view(1, 1, -1)
+            
+            output_caption_one_image = []            
+            for seq_idx in range(max_caption_length):
 
-#        all_embeddings = torch.cat((image_embeddings.view(self.batch_size, 1, -1), word_embeddings), dim=1)
-#        inputs = rnn_utils.pack_padded_sequence(all_embeddings, lengths, batch_first=True)
-#        h_t, (h_n, c_n) = self.lstm(inputs)
+                _, (h_image_idx, c_image_idx) = self.lstm(word_embeddings_image_idx, (h_image_idx, c_image_idx))
+                output_seq_idx = self.fc_output(h_image_idx)
+
+                predicted_word_idx = torch.argmax(output_seq_idx).item()
+                if predicted_word_idx == EDKidx:
+                    break
+                else:
+                    output_caption_one_image.append(predicted_word_idx)
+                    word_embeddings_image_idx = self.word_embeddings(torch.tensor(predicted_word_idx).cuda()).view(1, 1, -1)
+            
+            output_caption_one_image = list(self.decode_idx2word(output_caption_one_image))
+            output_captions_one_batch.append(output_caption_one_image)
+
+        return output_captions_one_batch
+
+    def beam_search_generator(self, image_embeddings, max_caption_length=20, STKidx=1, EDKidx=2):
+        output_captions_one_batch = None
+        return output_captions_one_batch

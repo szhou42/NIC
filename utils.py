@@ -27,11 +27,14 @@ def load_model(model_dir, model_list):
     return lastest_state
 
 
-def decode_idx2word(idx_seq, id2word):
-    return id2word[idx_seq]
+# TO DO: sample images from valset and save it on tensorboard.
+def save_images_and_captions(images, generated_captions, writer):
+    im = images.cpu().numpy().transpose(0, 2, 3, 1)
+    mean = [0.4701, 0.4469, 0.4076]
+    std = [0.2692, 0.2646, 0.2801]
 
-
-def beam_search():
+    im = np.array((im * std + mean) * 255, dtype=np.uint8)
+    
     pass
 
 
