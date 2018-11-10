@@ -68,11 +68,11 @@ transform_val = transforms.Compose([
 print('Loading dataset...')
 trainset = MSCOCO(train_imagepaths_and_captions, transform_train)
 trainloader = torch.utils.data.DataLoader(dataset=trainset, batch_size=BATCH_SIZE, collate_fn=collate_fn,
-                                          shuffle=True, drop_last=True, num_workers=NUM_WORKERS)
+                                          shuffle=True, drop_last=False, num_workers=NUM_WORKERS)
 
 valset = MSCOCO(val_imagepaths_and_captions, transform_val)
 valloader = torch.utils.data.DataLoader(dataset=valset, batch_size=BATCH_SIZE, collate_fn=collate_fn,
-                                        shuffle=True, drop_last=True, num_workers=NUM_WORKERS)
+                                        shuffle=False, drop_last=False, num_workers=NUM_WORKERS)
 
 print('Initializing models...')
 encoder = CNN(NO_WORD_EMBEDDINGS, pretrained_resnet101_file, freeze=True)

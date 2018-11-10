@@ -48,9 +48,12 @@ class RNN(nn.Module):
         super(RNN, self).__init__()
         
         self.id2word = np.array(pickle.load(open('../preprocessed_data/idx2word', 'rb')))
-
-        pretrained_word_embeddings = torch.from_numpy(pickle.load(open(pre_trained_file, 'rb')).astype(np.float32)).cuda()
-        self.word_embeddings = nn.Embedding.from_pretrained(pretrained_word_embeddings, freeze)
+        
+        if pre_trained_file is not None:
+            pretrained_word_embeddings = torch.from_numpy(pickle.load(open(pre_trained_file, 'rb')).astype(np.float32)).cuda()
+            self.word_embeddings = nn.Embedding.from_pretrained(pretrained_word_embeddings, freeze)
+        else:
+            self.word_embeddings = nn.Embedding(vocab_size, no_word_embeddings)
 
         self.lstm = nn.LSTM(
             input_size=no_word_embeddings,
