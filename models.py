@@ -22,11 +22,10 @@ def resnet101(pre_trained_file, pretrained=True):
 
 class CNN(nn.Module):
     
-    def __init__(self, batch_size, no_word_embeddings, pre_train_dir, freeze):
+    def __init__(self, no_word_embeddings, pre_train_dir, freeze):
         super(CNN, self).__init__()
 
         pretrained_resnet101 = resnet101(pre_train_dir, pretrained=True)
-        self.batch_size = batch_size
 
         self.resnet = nn.Sequential(*list(pretrained_resnet101.children())[:-1])
         if freeze:
@@ -37,7 +36,7 @@ class CNN(nn.Module):
 
     def forward(self, x):
         x = self.resnet(x)
-        x = x.view(self.batch_size, -1)
+        x = x.view(x.size(0), -1)
         x = self.fc_output(x)
 
         return x
@@ -45,10 +44,9 @@ class CNN(nn.Module):
 
 class RNN(nn.Module):
 
-    def __init__(self, batch_size, vocab_size, no_word_embeddings, hidden_size, num_layers, pre_trained_file, freeze):
+    def __init__(self, vocab_size, no_word_embeddings, hidden_size, num_layers, pre_trained_file, freeze):
         super(RNN, self).__init__()
         
-        self.batch_size = batch_size
         self.id2word = np.array(pickle.load(open('../preprocessed_data/idx2word', 'rb')))
 
         pretrained_word_embeddings = torch.from_numpy(pickle.load(open(pre_trained_file, 'rb')).astype(np.float32)).cuda()
@@ -70,7 +68,7 @@ class RNN(nn.Module):
 
         word_embeddings = self.word_embeddings(captions)
         
-        _, (h_0, c_0) = self.lstm(image_embeddings.view(self.batch_size, 1, -1))
+        _, (h_0, c_0) = self.lstm(image_embeddings.view(image_embeddings.size(0), 1, -1))
         
         inputs = rnn_utils.pack_padded_sequence(word_embeddings, lengths, batch_first=True)
         h_t, (h_n, c_n) = self.lstm(inputs, (h_0, c_0))
@@ -79,10 +77,10 @@ class RNN(nn.Module):
         return output
 
     def greedy_generator(self, image_embeddings, max_caption_length=20, STKidx=1, EDKidx=2):
-
-        _, (h_0, c_0) = self.lstm(image_embeddings.view(self.batch_size, 1, -1)) # 1 x batch_size x hidden_size
+        batch_size = image_embeddings.size(0)
+        _, (h_0, c_0) = self.lstm(image_embeddings.view(batch_size, 1, -1)) # h_0.shape: 1 x batch_size x hidden_size
         output_captions_one_batch = []
-        for image_idx in range(self.batch_size):
+        for image_idx in range(batch_size):
 
             h_image_idx = h_0[:, [image_idx], :]
             c_image_idx = c_0[:, [image_idx], :]

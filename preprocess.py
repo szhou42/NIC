@@ -179,7 +179,7 @@ def process_captions(caption_file):
 
 
 transform_val = transforms.Compose([
-    transforms.Resize((346, 346)),
+    transforms.Resize((259, 259)),
     transforms.CenterCrop((224, 224)),
     transforms.ToTensor()
 ])

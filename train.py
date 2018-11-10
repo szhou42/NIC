@@ -21,18 +21,16 @@ from dataloader import MSCOCO, collate_fn
 
 #DEBUG = True
 DEBUG = False
-
+NUM_WORKERS = 0
 NO_WORD_EMBEDDINGS = 300
 VOCAB_SIZE = 17000 + 3
 HIDDEN_SIZE = 512
 BATCH_SIZE = 32
 NUM_LAYERS = 1
 EPOCHS = 200
-LR = 0.001
-#LR_DECAY_RATE = 0.5
-#NUM_EPOCHS_PER_DECAY = 8
-NUM_WORKERS = 0
-#MOMENTUM = 0.9 # if SGD
+LR = 2
+LR_DECAY_RATE = 0.5
+NUM_EPOCHS_PER_DECAY = 4
 
 current_epoch = 1
 batch_step_count = 1
@@ -48,7 +46,7 @@ pretrained_word_embeddings_file = '../preprocessed_data/embeddings'
 writer = SummaryWriter(log_dir)
 
 transform_train = transforms.Compose([
-    transforms.Resize((346, 346)),
+    transforms.Resize((259, 259)),
     transforms.RandomCrop((224, 224)),
     transforms.ColorJitter(
             brightness=0.1*torch.randn(1),
@@ -57,14 +55,14 @@ transform_train = transforms.Compose([
             hue=0.1*torch.randn(1)),
     transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
-    transforms.Normalize([0.4756, 0.4439,0.4014], [0.2688, 0.2620, 0.2749])
+    transforms.Normalize([0.4731, 0.4467, 0.4059], [0.2681, 0.2627, 0.2774])
 ])
 
 transform_val = transforms.Compose([
-    transforms.Resize((346, 346)),
+    transforms.Resize((259, 259)),
     transforms.CenterCrop((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize([0.4756, 0.4439,0.4014], [0.2688, 0.2620, 0.2749])
+    transforms.Normalize([0.4731, 0.4467, 0.4059], [0.2681, 0.2627, 0.2774])
 ])
 
 print('Loading dataset...')
@@ -77,16 +75,15 @@ valloader = torch.utils.data.DataLoader(dataset=valset, batch_size=BATCH_SIZE, c
                                         shuffle=True, drop_last=True, num_workers=NUM_WORKERS)
 
 print('Initializing models...')
-encoder = CNN(BATCH_SIZE, NO_WORD_EMBEDDINGS, pretrained_resnet101_file, freeze=True)
-decoder = RNN(BATCH_SIZE, VOCAB_SIZE, NO_WORD_EMBEDDINGS, hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS,
+encoder = CNN(NO_WORD_EMBEDDINGS, pretrained_resnet101_file, freeze=True)
+decoder = RNN(VOCAB_SIZE, NO_WORD_EMBEDDINGS, hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS,
               pre_trained_file=pretrained_word_embeddings_file, freeze=False)
 encoder.cuda()
 decoder.cuda()
 
 model_paras = list(encoder.parameters()) + list(decoder.parameters())
-#optimizer = optim.SGD(model_paras, lr=LR)
-optimizer = optim.Adam(model_paras, lr=LR)
-#scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=LR_DECAY_RATE)
+optimizer = optim.SGD(model_paras, lr=LR)
+scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=LR_DECAY_RATE)
 
 
 # load lastest model to resume training
@@ -108,11 +105,10 @@ for epoch in range(current_epoch, EPOCHS+1):
     encoder.train()
     decoder.train()
 
-#    if current_epoch % NUM_EPOCHS_PER_DECAY == 0:
-#        scheduler.step(int(current_epoch/NUM_EPOCHS_PER_DECAY))
-#        print('Changing learning rate!')
-    
-    
+    if epoch % NUM_EPOCHS_PER_DECAY == 0:
+        print('Changing learning rate!')
+        scheduler.step(int(current_epoch/NUM_EPOCHS_PER_DECAY))
+
     print('[%d] epoch starts training...'%epoch)
     trainloss = 0.0
     for batch_idx, (images, captions, lengths) in enumerate(trainloader, 1):
@@ -120,7 +116,7 @@ for epoch in range(current_epoch, EPOCHS+1):
         images = images.cuda()
         captions = captions.cuda()
         lengths = lengths.cuda()
-        # when doing forward propagation, we do not input end word key; when calculate loss, we do not count start word key.
+        # when doing forward propagation, we do not input end word key; when calculating loss, we do not count start word key.
         lengths -= 1
         # throw out the start word key when calculating loss.
         targets = rnn_utils.pack_padded_sequence(captions[:, 1:], lengths, batch_first=True)[0]
@@ -183,6 +179,7 @@ for epoch in range(current_epoch, EPOCHS+1):
           %(epoch, trainloss, valloss, time_used_epoch/60, time_used_global/3600))
 
     if epoch % checkpoint == 0:
+        print('Saving model!')
         save_model(model_dir, epoch, batch_step_count, time_used_global, optimizer, encoder, decoder)
         
     if DEBUG:
