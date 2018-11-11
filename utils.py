@@ -56,10 +56,16 @@ def generate_caption(encoder, decoder):
     return caption
     
 
-# bleu score
-def bleu(predicted_sentences, true_sentences):
+'''
+bleu score, specify which BLEU scores to use (e.g type can be 1,2,3, or 4)
+predicted_sentences is a list of sentences
+true_sentences is also a list of sentences
+'''
+def bleu_score(type, predicted_sentences, true_sentences):
+    weights = [(1,0,0,0), (0.5,0.5,0,0), (0.33,0.33,0.33), (0.25,0.25,0.25,0.25)]
+    weight = weights[type - 1]
     score_sum = 0
     for i in range(len(predicted_sentences)):
-        score_sum = score_sum + sentence_bleu(true_sentences[i], predicted_sentences[i])
+        score_sum = score_sum + sentence_bleu(true_sentences[i], predicted_sentences[i], weights = weight)
     score_avg = score_sum / len(predicted_sentences) 
     return score_avg
