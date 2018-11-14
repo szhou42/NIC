@@ -170,6 +170,7 @@ class RNN(nn.Module):
                 ordered = sorted(all_candidates, reverse = True, key=lambda tup:tup[1])
                 sequences = ordered[:beam_width]
 
+            # TODO: Remove any captions that don't have END token
             for p in range(len(sequences)):
                 caption = sequences[p][0]
                 caption = list(self.decode_idx2word(caption))
