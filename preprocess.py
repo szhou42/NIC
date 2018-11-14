@@ -215,3 +215,4 @@ def cal_mean_std(image_dir, transform=transform_val):
     std = (accumulator / (224*224) / count)**0.5
 
     return mean, std
+
