@@ -8,9 +8,10 @@ import torch
 import numpy as np
 from PIL import Image
 from torchvision import transforms
+from skimage import io
 #from nltk.translate.bleu_score import sentence_bleu
 
-def save_model(model_dir, epoch, batch_step_count, time_used_global, optimizer, encoder, decoder):
+def save_model(model_name, model_dir, epoch, batch_step_count, time_used_global, optimizer, encoder, decoder):
    state = {
             'epoch': epoch,
             'batch_step_count': batch_step_count,
@@ -19,7 +20,7 @@ def save_model(model_dir, epoch, batch_step_count, time_used_global, optimizer, 
             'encoder': encoder.state_dict(),
             'decoder': decoder.state_dict()
             }
-   torch.save(state, open(model_dir + 'model_'+str(epoch)+'.pth', 'wb'))
+   torch.save(state, open(model_dir + model_name + '_' + str(epoch)+'.pth', 'wb'))
 
 
 def load_model(model_dir, model_list):
@@ -30,29 +31,36 @@ def load_model(model_dir, model_list):
 
 
 # TO DO: sample images from valset and save it on tensorboard. Not finished yet.
-def save_images_and_captions(images, generated_captions, writer):
-    im = images.cpu().numpy().transpose(0, 2, 3, 1)
+def save_images_and_captions(image, generated_captions, writer):
+    im = image.cpu().numpy().transpose(0, 2, 3, 1)
     mean = [0.4701, 0.4469, 0.4076]
     std = [0.2692, 0.2646, 0.2801]
 
     im = np.array((im * std + mean) * 255, dtype=np.uint8)
+    io.imshow(im[0])
     
     pass
 
 # TO DO. Not finished yet.
-def generate_caption(encoder, decoder):
+def generate_caption(encoder, decoder, transform_val):
+    encoder.eval()
+    decoder.eval()
     transform_val = transforms.Compose([
-        transforms.Resize((259, 259)),
-        transforms.CenterCrop((224, 224)),
+        transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize([0.4731, 0.4467, 0.4059], [0.2681, 0.2627, 0.2774])
     ])
-    image = Image.open('../test3.jpg')
+
+    image = Image.open('../test_images/test3.jpg')
     image = transform_val(image)
     image = image.expand([1, -1, -1, -1])
     image = image.cuda()
     image_embeddings = encoder(image)
+
+    caption = decoder.beam_search_generator(image_embeddings)
     caption = decoder.greedy_generator(image_embeddings)
+    
+    print(' '.join(caption[0]))
     return caption
     
 
