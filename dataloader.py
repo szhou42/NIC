@@ -25,13 +25,14 @@ def collate_fn(batch):
 
 class MSCOCO(torch.utils.data.Dataset):
 
-    def __init__(self, imagepaths_and_captions, transform):
+    def __init__(self, vocab_size, imagepaths_and_captions, transform):
         
         self.imagepaths_captions = pickle.load(open(imagepaths_and_captions, 'rb'))
         
         self.caption_ids = list(self.imagepaths_captions.keys())
 
         self.transform = transform
+        self.vocab_size = vocab_size
 
     def __getitem__(self, index):  
         caption_id = self.caption_ids[index]
@@ -39,6 +40,7 @@ class MSCOCO(torch.utils.data.Dataset):
         imagepath_and_caption = self.imagepaths_captions[caption_id]
         image_path = imagepath_and_caption['image_path']
         caption = imagepath_and_caption['caption']
+        caption[caption>=self.vocab_size] = 0
 
         image = Image.open(image_path).convert('RGB')
         image = self.transform(image)
