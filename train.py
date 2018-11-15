@@ -5,7 +5,9 @@ Created in Oct 2018
 """
 
 import os
+import sys
 import time
+import pickle
 from tensorboardX import SummaryWriter
 
 import torch
@@ -18,101 +20,154 @@ from models import CNN, RNN
 from utils import save_model, load_model
 from dataloader import MSCOCO, collate_fn
 
-
+MODEL_NAME = sys.argv[1]
+#MODEL_NAME = 'SGD-17000-NOV10'
+#MODEL_NAME = 'ADAM-13000-NOAVGPOOL-NOV15'
+NUM_WORKERS = 0
+EPOCHS = 50
 #DEBUG = True
 DEBUG = False
-NUM_WORKERS = 8
-NO_WORD_EMBEDDINGS = 512
-VOCAB_SIZE = 17000 + 3
-HIDDEN_SIZE = 512
-BATCH_SIZE = 32
-NUM_LAYERS = 1
-EPOCHS = 200
-LR = 2
-LR_DECAY_RATE = 0.5
-NUM_EPOCHS_PER_DECAY = 4
 
+print(MODEL_NAME, 'starts running!')
+
+init_params_file = '../model_params/' + MODEL_NAME
+if os.path.isfile(init_params_file):
+    # if resume training, load hypermeters.
+    print('Loading params...')
+    params = pickle.load(open(init_params_file, 'rb'))
+
+    LR = params['LR']
+    VOCAB_SIZE = params['VOCAB_SIZE']
+    NO_WORD_EMBEDDINGS = params['NO_WORD_EMBEDDINGS']
+    HIDDEN_SIZE = params['HIDDEN_SIZE']
+    BATCH_SIZE = params['BATCH_SIZE']
+    NUM_LAYERS = params['NUM_LAYERS']
+
+    train_imagepaths_and_captions = params['train_imagepaths_and_captions']
+    val_imagepaths_and_captions = params['val_imagepaths_and_captions']
+    pretrained_cnn_file = params['pretrained_cnn_file']
+    pretrained_word_embeddings_file = params['pretrained_word_embeddings_file']
+
+    transform_train = params['transform_train']
+    transform_val = params['transform_val']
+
+    print('Loading models...')
+    encoder = params['encoder']
+    decoder = params['decoder']
+    encoder.cuda()
+    decoder.cuda()
+
+    print('Loading optimizer...')
+    optimizer = params['optimizer']
+    ADAM_FLAG = params['ADAM_FLAG']
+
+else:
+    # if tune a new set of hyperparameters or new models, change parameters below before training.
+    print('Initilizing params...')
+    LR = 4e-4
+    VOCAB_SIZE = 13000 + 3
+    NO_WORD_EMBEDDINGS = 512
+    HIDDEN_SIZE = 512
+    BATCH_SIZE = 128
+    NUM_LAYERS = 1
+
+    train_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.train'
+    val_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.val'
+    pretrained_cnn_file = '../pre_trained/resnet101-5d3b4d8f.pth'
+#    pretrained_word_embeddings_file = '../preprocessed_data/embeddings'
+    pretrained_word_embeddings_file = None
+
+
+    transform_train = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ColorJitter(
+                brightness=0.1*torch.randn(1),
+                contrast=0.1*torch.randn(1),
+                saturation=0.1*torch.randn(1),
+                hue=0.1*torch.randn(1)),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize([0.4731, 0.4467, 0.4059], [0.2681, 0.2627, 0.2774])
+    ])
+    transform_val = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.4731, 0.4467, 0.4059], [0.2681, 0.2627, 0.2774])
+    ])
+    
+    params = {'LR': LR, 'VOCAB_SIZE': VOCAB_SIZE, 'NO_WORD_EMBEDDINGS': NO_WORD_EMBEDDINGS, 'HIDDEN_SIZE': HIDDEN_SIZE,
+              'BATCH_SIZE': BATCH_SIZE, 'NUM_LAYERS': NUM_LAYERS, 'train_imagepaths_and_captions': train_imagepaths_and_captions,
+              'val_imagepaths_and_captions': val_imagepaths_and_captions, 'pretrained_cnn_file': pretrained_cnn_file,
+              'pretrained_word_embeddings_file': pretrained_word_embeddings_file, 'transform_train': transform_train, 
+              'transform_val': transform_val}
+
+
+    print('Initializing models...')
+    encoder = CNN(NO_WORD_EMBEDDINGS, pretrained_cnn_file, freeze=True)
+    decoder = RNN(VOCAB_SIZE, NO_WORD_EMBEDDINGS, hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS,
+                  pre_trained_file=pretrained_word_embeddings_file, freeze=False)
+    params['encoder'] = encoder
+    params['decoder'] = decoder
+    encoder.cuda()
+    decoder.cuda()
+    
+    print('Initializing optimizer...')
+    model_paras = list(encoder.parameters()) + list(decoder.parameters())
+    optimizer = optim.Adam(model_paras, lr=LR)
+    ADAM_FLAG = True
+    params['optimizer'] = optimizer
+    params['ADAM_FLAG'] = ADAM_FLAG
+
+
+    pickle.dump(params, open(init_params_file, 'wb'))
+
+
+model_dir = '../saved_model/' + MODEL_NAME + '/'
+log_dir = '../logs/' + MODEL_NAME + '/'
+if not os.path.isdir(model_dir):
+    os.mkdir(model_dir)
+if not os.path.isdir(log_dir):
+    os.mkdir(log_dir)
+
+# initialize accumulators.
 current_epoch = 1
 batch_step_count = 1
 time_used_global = 0.0
 checkpoint = 1
 
-model_dir = '../saved_model/'
-log_dir = '../logs/'
-train_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.train'
-val_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.val'
-pretrained_resnet101_file = '../pre_trained/resnet101-5d3b4d8f.pth'
-pretrained_word_embeddings_file = None
-writer = SummaryWriter(log_dir)
-
-transform_train = transforms.Compose([
-    transforms.Resize((259, 259)),
-    transforms.RandomCrop((224, 224)),
-    transforms.ColorJitter(
-            brightness=0.1*torch.randn(1),
-            contrast=0.1*torch.randn(1),
-            saturation=0.1*torch.randn(1),
-            hue=0.1*torch.randn(1)),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    transforms.Normalize([0.4731, 0.4467, 0.4059], [0.2681, 0.2627, 0.2774])
-])
-
-transform_val = transforms.Compose([
-    transforms.Resize((259, 259)),
-    transforms.CenterCrop((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize([0.4731, 0.4467, 0.4059], [0.2681, 0.2627, 0.2774])
-])
-
-print('Loading dataset...')
-trainset = MSCOCO(train_imagepaths_and_captions, transform_train)
-trainloader = torch.utils.data.DataLoader(dataset=trainset, batch_size=BATCH_SIZE, collate_fn=collate_fn,
-                                          shuffle=True, drop_last=False, num_workers=NUM_WORKERS)
-
-valset = MSCOCO(val_imagepaths_and_captions, transform_val)
-valloader = torch.utils.data.DataLoader(dataset=valset, batch_size=BATCH_SIZE, collate_fn=collate_fn,
-                                        shuffle=False, drop_last=False, num_workers=NUM_WORKERS)
-
-print('Initializing models...')
-encoder = CNN(NO_WORD_EMBEDDINGS, pretrained_resnet101_file, freeze=True)
-decoder = RNN(VOCAB_SIZE, NO_WORD_EMBEDDINGS, hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS,
-              pre_trained_file=pretrained_word_embeddings_file, freeze=False)
-encoder.cuda()
-decoder.cuda()
-
-model_paras = list(encoder.parameters()) + list(decoder.parameters())
-optimizer = optim.SGD(model_paras, lr=LR)
-scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=LR_DECAY_RATE)
-
 
 # load lastest model to resume training
 model_list = os.listdir(model_dir)
 if model_list:
-    print('Loading model...')
+    print('Loading lastest checkpoint...')
     state = load_model(model_dir, model_list)
     encoder.load_state_dict(state['encoder'])
     decoder.load_state_dict(state['decoder'])
     optimizer.load_state_dict(state['optimizer'])
     current_epoch = state['epoch'] + 1
     time_used_global = state['time_used_global']
-    batch_step_count = state['batch_step_count']    
+    batch_step_count = state['batch_step_count']
 
 criterion = nn.CrossEntropyLoss()
 
+print('Loading dataset...')
+trainset = MSCOCO(VOCAB_SIZE, train_imagepaths_and_captions, transform_train)
+trainloader = torch.utils.data.DataLoader(dataset=trainset, batch_size=BATCH_SIZE, collate_fn=collate_fn,
+                                          shuffle=True, drop_last=False, num_workers=NUM_WORKERS)
+
+valset = MSCOCO(VOCAB_SIZE, val_imagepaths_and_captions, transform_val)
+valloader = torch.utils.data.DataLoader(dataset=valset, batch_size=BATCH_SIZE, collate_fn=collate_fn, 
+                                        shuffle=False, drop_last=False, num_workers=NUM_WORKERS)
+writer = SummaryWriter(log_dir)
 for epoch in range(current_epoch, EPOCHS+1):
     start_time_epoch = time.time()
-    encoder.train()
+    encoder.eval() # to get BN layers work normally.
     decoder.train()
-
-    if epoch % NUM_EPOCHS_PER_DECAY == 0:
-        print('Changing learning rate!')
-        scheduler.step(int(current_epoch/NUM_EPOCHS_PER_DECAY))
 
     print('[%d] epoch starts training...'%epoch)
     trainloss = 0.0
     for batch_idx, (images, captions, lengths) in enumerate(trainloader, 1):
-
+        
         images = images.cuda()
         captions = captions.cuda()
         lengths = lengths.cuda()
@@ -132,9 +187,17 @@ for epoch in range(current_epoch, EPOCHS+1):
         trainloss += loss
 
         loss.backward()
+
+        # avoid overflow error of ADAM optimizer in the BWs.
+        if ADAM_FLAG:
+            for group in optimizer.param_groups:
+                for p in group['params']:
+                    state = optimizer.state[p]
+                    if('step' in state and state['step']>=1024):
+                        state['step'] = 1000
         optimizer.step()
         
-        if batch_idx % 100 == 0:
+        if batch_idx % 50 == 0:
             writer.add_scalar('batch/training_loss', loss, batch_step_count)
             batch_step_count += 1
             print('[%d] epoch, [%d] batch, [%.4f] loss, [%.2f] min used.'
@@ -180,7 +243,7 @@ for epoch in range(current_epoch, EPOCHS+1):
 
     if epoch % checkpoint == 0:
         print('Saving model!')
-        save_model(model_dir, epoch, batch_step_count, time_used_global, optimizer, encoder, decoder)
+        save_model(MODEL_NAME, model_dir, epoch, batch_step_count, time_used_global, optimizer, encoder, decoder)
         
     if DEBUG:
         break
