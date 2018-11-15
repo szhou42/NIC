@@ -27,14 +27,14 @@ class CNN(nn.Module):
     def __init__(self, no_word_embeddings, pre_train_dir, freeze):
         super(CNN, self).__init__()
 
-        pretrained_resnet101 = resnet101(pre_train_dir, pretrained=True)
+        pretrained_cnn = resnet101(pre_train_dir, pretrained=True)
 
-        self.resnet = nn.Sequential(*list(pretrained_resnet101.children())[:-1])
+        self.resnet = nn.Sequential(*list(pretrained_cnn.children())[:-1])
         if freeze:
             for param in self.resnet.parameters():
                 param.requires_grad_(requires_grad=False)
 
-        self.fc_output = nn.Linear(pretrained_resnet101.fc.in_features, no_word_embeddings)
+        self.fc_output = nn.Linear(pretrained_cnn.fc.in_features, no_word_embeddings)
 
     def forward(self, x):
         x = self.resnet(x)
@@ -119,7 +119,7 @@ class RNN(nn.Module):
     # don't use this yet.. has bug
     def beam_search_generator(self, image_embeddings, max_caption_length=20, STKidx=1, EDKidx=2):
         # Initially, there is only an empty sequence
-        beam_width = 1 
+        beam_width = 3 
 
         batch_size = image_embeddings.size(0)
         _, (h_0, c_0) = self.lstm(image_embeddings.view(batch_size, 1, -1)) # h_0.shape: 1 x batch_size x hidden_size
