@@ -66,7 +66,7 @@ class RNN(nn.Module):
         
         self.fc_output = nn.Linear(hidden_size, vocab_size)
 
-        self.softmax = nn.Softmax()
+        self.softmax = nn.LogSoftmax()
 
     def decode_idx2word(self, idx_seq):
         return self.id2word[idx_seq]
@@ -132,9 +132,9 @@ class RNN(nn.Module):
             c_image_idx = c_0[:, [image_idx], :]
 
             output_caption_one_image = []
-            all_candidates = []
             for seq_idx in range(max_caption_length):
                 print('seq_idx = ', seq_idx);
+                all_candidates = []
                 for k in range(len(sequences)):
                     seq, score, h_curr, c_curr = sequences[k]
                     last_word_in_sequence = seq[len(seq) - 1]
