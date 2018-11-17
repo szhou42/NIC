@@ -63,7 +63,6 @@ class RNN(nn.Module):
             num_layers=num_layers,
             batch_first=True
         )
-        
         self.fc_output = nn.Linear(hidden_size, vocab_size)
 
         self.softmax = nn.LogSoftmax()

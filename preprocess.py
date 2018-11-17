@@ -184,6 +184,33 @@ transform_val = transforms.Compose([
     transforms.ToTensor()
 ])
 
+
+'''
+    This function generate the following list based on the imagepaths_and_captions file.
+    The generated list can be more conveniently used when evaluating BLEU score for the validation set
+    Each list element is a tuple like this: ("val2017/dog.jpg", [[21,11,111,33,66], [111,22,233,11,66], [88,22,111,11,66]])
+'''
+
+def generate_imagepaths_captions_val(imagepaths_and_captions, imagepaths_and_captions_val):
+    imagepaths_captions = pickle.load(open(imagepaths_and_captions, 'rb'))
+    image_list = [] 
+    imagepath2idx = {}
+    idx = 0
+    for caption_id in imagepaths_captions:
+        # Get the caption and image path
+        imagepath_and_caption = imagepaths_captions[caption_id]
+        image_path = imagepath_and_caption['image_path']
+        caption = imagepath_and_caption['caption']
+
+        if image_path in imagepath2idx:
+            image_idx = imagepath2idx[image_path]
+            t = image_list[image_idx] 
+            t[1].append(caption)
+        else:
+            image_list.append((image_path, [caption]))
+
+    pickle.dump(image_list, open(imagepaths_and_captions_val, 'wb'))
+
 def cal_mean_std(image_dir, transform=transform_val):
     image_paths = os.listdir(image_dir)
     
@@ -216,3 +243,4 @@ def cal_mean_std(image_dir, transform=transform_val):
 
     return mean, std
 
+generate_imagepaths_captions_val('../preprocessed_data/imagepaths_captions.val', '../preprocessed_data/imagepaths_captions.newval')

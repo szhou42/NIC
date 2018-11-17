@@ -24,11 +24,13 @@ def collate_fn(batch):
 
 
 class MSCOCO(torch.utils.data.Dataset):
-
+    '''
+        There is a total of #images * 5 items in the dict imagepaths_and_captions
+        Each key maps to a image_path + caption pair
+    '''
     def __init__(self, vocab_size, imagepaths_and_captions, transform):
         
         self.imagepaths_captions = pickle.load(open(imagepaths_and_captions, 'rb'))
-        
         self.caption_ids = list(self.imagepaths_captions.keys())
 
         self.transform = transform
@@ -49,3 +51,43 @@ class MSCOCO(torch.utils.data.Dataset):
     
     def __len__(self):
         return len(self.caption_ids)
+
+def collate_fn_val(batch):
+    batch.sort(key=lambda image_caption: len(image_caption[1]), reverse=True)
+    images, captions = zip(*batch)
+    
+    images = torch.stack(images)
+    captions = torch.FloatTensor(captions)
+    captions = rnn_utils.pad_sequence(captions, batch_first=True, padding_value=0)
+
+    return images, captions
+
+
+
+class MSCOCO_VAL(torch.utils.data.Dataset):
+    '''
+        Define image_dict = {}
+        key = image_path, value = a list of captions
+        e.g image_path = "val2017/dog.jpg", value = [[21,11,111,33,66], [111,22,233,11,66], [88,22,111,11,66]]
+    '''
+    def __init__(self, vocab_size, imagepaths_and_captions_val, transform):
+        self.image_list = pickle.load(open(imagepaths_and_captions_val, 'rb'))
+        
+        self.transform = transform
+        self.vocab_size = vocab_size
+
+    def __getitem__(self, index):  
+        image_path = self.image_list[index][0]
+        captions = self.image_list[index][1]
+
+        for c in captions:
+            c[c>=self.vocab_size] = 0
+            
+        image = Image.open(image_path).convert('RGB')
+        image = self.transform(image)
+
+        return image, captions
+    
+    def __len__(self):
+        return len(self.image_list)
+
