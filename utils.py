@@ -29,6 +29,10 @@ def load_model(model_dir, model_list):
     lastest_state = torch.load(open(lastest_model, 'rb'))
     return lastest_state
 
+def load_model_by_filename(model_dir, model_name):
+    model_name = model_dir + model_name
+    model_state = torch.load(open(model_name, 'rb'))
+    return model_state
 
 # TODO: sample images from valset and save it on tensorboard. Not finished yet.
 def save_images_and_captions(image, generated_captions, writer):

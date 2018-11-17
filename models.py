@@ -73,7 +73,6 @@ class RNN(nn.Module):
             batch_first=True
         )
 
-
         if dropout_prob:
             self.fc_output = nn.Sequential(
                     nn.Linear(hidden_size, hidden_size),
