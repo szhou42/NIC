@@ -20,8 +20,8 @@ from models import CNN, RNN
 from utils import save_model, load_model
 from dataloader import MSCOCO, collate_fn
 
-MODEL_NAME = sys.argv[1]
-#MODEL_NAME = 'SGD-17000-NOV10'
+#MODEL_NAME = sys.argv[1]
+MODEL_NAME = 'SGD-17000-NOV10'
 #MODEL_NAME = 'ADAM-13000-NOAVGPOOL-NOV15'
 NUM_WORKERS = 0
 EPOCHS = 50
@@ -42,6 +42,10 @@ if os.path.isfile(init_params_file):
     HIDDEN_SIZE = params['HIDDEN_SIZE']
     BATCH_SIZE = params['BATCH_SIZE']
     NUM_LAYERS = params['NUM_LAYERS']
+    WEIGHT_DECAY = params['WEIGHT_DECAY']
+    RNN_DROPOUT = params['RNN_DROPOUT']
+    CNN_DROPOUT = params['CNN_DROPOUT']
+    ADAM_FLAG = params['ADAM_FLAG']
 
     train_imagepaths_and_captions = params['train_imagepaths_and_captions']
     val_imagepaths_and_captions = params['val_imagepaths_and_captions']
@@ -59,17 +63,23 @@ if os.path.isfile(init_params_file):
 
     print('Loading optimizer...')
     optimizer = params['optimizer']
-    ADAM_FLAG = params['ADAM_FLAG']
 
 else:
     # if tune a new set of hyperparameters or new models, change parameters below before training.
     print('Initilizing params...')
-    LR = 4e-4
+    LR = 0.0001
+    WEIGHT_DECAY = 0.0001
+    GRAD_CLIP = 5.0
+    RNN_DROPOUT = 0.5
+    CNN_DROPOUT = 0.5
+
     VOCAB_SIZE = 13000 + 3
     NO_WORD_EMBEDDINGS = 512
     HIDDEN_SIZE = 512
     BATCH_SIZE = 128
     NUM_LAYERS = 1
+    ADAM_FLAG = True
+
 
     train_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.train'
     val_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.val'
@@ -87,25 +97,29 @@ else:
                 hue=0.1*torch.randn(1)),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        transforms.Normalize([0.4731, 0.4467, 0.4059], [0.2681, 0.2627, 0.2774])
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]) # copy from github
     ])
+
     transform_val = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
-        transforms.Normalize([0.4731, 0.4467, 0.4059], [0.2681, 0.2627, 0.2774])
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]) # copy from github
     ])
-    
+
+#        transforms.Normalize([0.4731, 0.4467, 0.4059], [0.2681, 0.2627, 0.2774]) # calculated by our code.
+
     params = {'LR': LR, 'VOCAB_SIZE': VOCAB_SIZE, 'NO_WORD_EMBEDDINGS': NO_WORD_EMBEDDINGS, 'HIDDEN_SIZE': HIDDEN_SIZE,
               'BATCH_SIZE': BATCH_SIZE, 'NUM_LAYERS': NUM_LAYERS, 'train_imagepaths_and_captions': train_imagepaths_and_captions,
               'val_imagepaths_and_captions': val_imagepaths_and_captions, 'pretrained_cnn_file': pretrained_cnn_file,
               'pretrained_word_embeddings_file': pretrained_word_embeddings_file, 'transform_train': transform_train, 
-              'transform_val': transform_val}
+              'transform_val': transform_val, 'WEIGHT_DECAY': WEIGHT_DECAY, 'ADAM_FLAG': ADAM_FLAG, 'RNN_DROPOUT':RNN_DROPOUT,
+              'CNN_DROPOUT': CNN_DROPOUT}
 
 
     print('Initializing models...')
-    encoder = CNN(NO_WORD_EMBEDDINGS, pretrained_cnn_file, freeze=True)
+    encoder = CNN(NO_WORD_EMBEDDINGS, pretrained_cnn_file, freeze=True, dropout_prob=CNN_DROPOUT)
     decoder = RNN(VOCAB_SIZE, NO_WORD_EMBEDDINGS, hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS,
-                  pre_trained_file=pretrained_word_embeddings_file, freeze=False)
+                  pre_trained_file=pretrained_word_embeddings_file, freeze=False, dropout_prob=RNN_DROPOUT)
     params['encoder'] = encoder
     params['decoder'] = decoder
     encoder.cuda()
@@ -113,10 +127,8 @@ else:
     
     print('Initializing optimizer...')
     model_paras = list(encoder.parameters()) + list(decoder.parameters())
-    optimizer = optim.Adam(model_paras, lr=LR)
-    ADAM_FLAG = True
+    optimizer = optim.Adam(model_paras, lr=LR, weight_decay=WEIGHT_DECAY)
     params['optimizer'] = optimizer
-    params['ADAM_FLAG'] = ADAM_FLAG
 
 
     pickle.dump(params, open(init_params_file, 'wb'))
@@ -161,7 +173,7 @@ valloader = torch.utils.data.DataLoader(dataset=valset, batch_size=BATCH_SIZE, c
 writer = SummaryWriter(log_dir)
 for epoch in range(current_epoch, EPOCHS+1):
     start_time_epoch = time.time()
-    encoder.eval() # to get BN layers work normally.
+    encoder.train() # to get BN layers work normally.
     decoder.train()
 
     print('[%d] epoch starts training...'%epoch)
@@ -187,14 +199,26 @@ for epoch in range(current_epoch, EPOCHS+1):
         trainloss += loss
 
         loss.backward()
-
+        
+        # avoid exploding gradient
+        if GRAD_CLIP is not None:
+            for group in optimizer.param_groups:
+                for p in group['params']:
+                    if p.grad is not None:
+                        p.grad.data.clamp_(-GRAD_CLIP, GRAD_CLIP)
+                    
+                    if ADAM_FLAG:
+                        state = optimizer.state[p]
+                        if('step' in state and state['step']>=1024):
+                            state['step'] = 1000
         # avoid overflow error of ADAM optimizer in the BWs.
-        if ADAM_FLAG:
+        elif ADAM_FLAG:
             for group in optimizer.param_groups:
                 for p in group['params']:
                     state = optimizer.state[p]
                     if('step' in state and state['step']>=1024):
                         state['step'] = 1000
+
         optimizer.step()
         
         if batch_idx % 50 == 0:
