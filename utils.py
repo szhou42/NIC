@@ -30,37 +30,40 @@ def load_model(model_dir, model_list):
     return lastest_state
 
 
-# TO DO: sample images from valset and save it on tensorboard. Not finished yet.
+# TODO: sample images from valset and save it on tensorboard. Not finished yet.
 def save_images_and_captions(image, generated_captions, writer):
     im = image.cpu().numpy().transpose(0, 2, 3, 1)
-    mean = [0.4701, 0.4469, 0.4076]
-    std = [0.2692, 0.2646, 0.2801]
+    mean = [0.485, 0.456, 0.406]
+    std = [0.229, 0.224, 0.225]
 
     im = np.array((im * std + mean) * 255, dtype=np.uint8)
     io.imshow(im[0])
     
     pass
 
-# TO DO. Not finished yet.
+# TODO: Not finished yet.
 def generate_caption(encoder, decoder, transform_val):
     encoder.eval()
     decoder.eval()
     transform_val = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
-        transforms.Normalize([0.4731, 0.4467, 0.4059], [0.2681, 0.2627, 0.2774])
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
 
-    image = Image.open('../test_images/test3.jpg')
+    image = Image.open('../test_images/test8.jpg')
     image = transform_val(image)
     image = image.expand([1, -1, -1, -1])
     image = image.cuda()
     image_embeddings = encoder(image)
-
-    caption = decoder.beam_search_generator(image_embeddings)
-    caption = decoder.greedy_generator(image_embeddings)
-    
-    print(' '.join(caption[0]))
+    with torch.no_grad():                       
+#        caption = decoder.beam_search_generator(image_embeddings)
+        caption = decoder.greedy_generator(image_embeddings)
+        print(' '.join(caption[0]))
+        caption, score = decoder.beam_search_generator_v2(image_embeddings, 0)
+        print(' '.join(caption[0][0]))
+        caption = decoder.beam_search_generator(image_embeddings)
+        print(' '.join(caption[0]))
     return caption
     
 
