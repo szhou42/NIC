@@ -124,7 +124,7 @@ else:
     params['decoder'] = decoder
     encoder.cuda()
     decoder.cuda()
-    
+
     print('Initializing optimizer...')
     model_paras = list(encoder.parameters()) + list(decoder.parameters())
     optimizer = optim.Adam(model_paras, lr=LR, weight_decay=WEIGHT_DECAY)
