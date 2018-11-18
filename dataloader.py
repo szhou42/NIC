@@ -54,14 +54,17 @@ class MSCOCO(torch.utils.data.Dataset):
 
 def collate_fn_val(batch):
     batch.sort(key=lambda image_caption: len(image_caption[1]), reverse=True)
-    images, captions = zip(*batch)
-    
+    images, captions_calc_bleu, image_ids = zip(*batch)
     images = torch.stack(images)
-    captions = torch.FloatTensor(captions)
-    captions = rnn_utils.pad_sequence(captions, batch_first=True, padding_value=0)
+    
+    captions_calc_loss = []
+    lengths = []
+    for i in range(len(captions_calc_bleu)):
+        captions_calc_bleu[i].sort(key=lambda image_caption: len(image_caption), reverse=True)
+        lengths.append(torch.tensor([each_caption.size()[0] for each_caption in captions_calc_bleu[i]]))
+        captions_calc_loss.append(rnn_utils.pad_sequence(captions_calc_bleu[i], batch_first=True, padding_value=0))
 
-    return images, captions
-
+    return images, captions_calc_bleu, captions_calc_loss, lengths, image_ids
 
 
 class MSCOCO_VAL(torch.utils.data.Dataset):
@@ -70,15 +73,17 @@ class MSCOCO_VAL(torch.utils.data.Dataset):
         key = image_path, value = a list of captions
         e.g image_path = "val2017/dog.jpg", value = [[21,11,111,33,66], [111,22,233,11,66], [88,22,111,11,66]]
     '''
-    def __init__(self, vocab_size, imagepaths_and_captions_val, transform):
-        self.image_list = pickle.load(open(imagepaths_and_captions_val, 'rb'))
-        
+    def __init__(self, vocab_size, val_imagepaths_and_captions, transform):
+        self.image_list = pickle.load(open(val_imagepaths_and_captions, 'rb'))
+
         self.transform = transform
         self.vocab_size = vocab_size
 
     def __getitem__(self, index):  
         image_path = self.image_list[index][0]
         captions = self.image_list[index][1]
+        image_id = self.image_list[index][2]
+
 
         for c in captions:
             c[c>=self.vocab_size] = 0
@@ -86,8 +91,7 @@ class MSCOCO_VAL(torch.utils.data.Dataset):
         image = Image.open(image_path).convert('RGB')
         image = self.transform(image)
 
-        return image, captions
+        return image, captions, image_id
     
     def __len__(self):
         return len(self.image_list)
-
