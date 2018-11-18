@@ -9,7 +9,7 @@ import numpy as np
 from PIL import Image
 from torchvision import transforms
 from skimage import io
-#from nltk.translate.bleu_score import sentence_bleu
+from nltk.translate.bleu_score import sentence_bleu
 
 def save_model(model_name, model_dir, epoch, batch_step_count, time_used_global, optimizer, encoder, decoder):
    state = {
@@ -75,12 +75,9 @@ def generate_caption(encoder, decoder, transform_val):
 bleu score, specify which BLEU scores to use (e.g type can be 1,2,3, or 4)
 predicted_sentences is a list of sentences
 true_sentences is also a list of sentences
-def bleu_score(type, predicted_sentences, true_sentences):
-    weights = [(1,0,0,0), (0.5,0.5,0,0), (0.33,0.33,0.33), (0.25,0.25,0.25,0.25)]
-    weight = weights[type - 1]
-    score_sum = 0
-    for i in range(len(predicted_sentences)):
-        score_sum = score_sum + sentence_bleu(true_sentences[i], predicted_sentences[i], weights = weight)
-    score_avg = score_sum / len(predicted_sentences) 
-    return score_avg
 '''
+def bleu_score(ngram, true_sentences, predicted_sentence):
+    weights = [(1, 0, 0, 0), (0.5, 0.5, 0,0), (0.33, 0.33, 0.33), (0.25, 0.25, 0.25, 0.25)]
+    weight = weights[ngram]
+    score = sentence_bleu(true_sentences, predicted_sentence, weights = weight)
+    return score

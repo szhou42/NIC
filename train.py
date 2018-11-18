@@ -7,6 +7,7 @@ import os
 import sys
 import time
 import pickle
+import numpy as np
 from tensorboardX import SummaryWriter
 
 import torch
@@ -16,12 +17,14 @@ import torch.optim as optim
 from torchvision import transforms
 
 from models import CNN, RNN
-from utils import save_model, load_model
-from dataloader import MSCOCO, collate_fn
+from utils import save_model, load_model, bleu_score
+from dataloader import MSCOCO, collate_fn, MSCOCO_VAL, collate_fn_val
 
-#MODEL_NAME = sys.argv[1]
-MODEL_NAME = 'SGD-17000-NOV10'
+MODEL_NAME = sys.argv[1]
+#MODEL_NAME = 'SGD-17000-NOV10'
 #MODEL_NAME = 'ADAM-13000-NOAVGPOOL-NOV15'
+#MODEL_NAME = 'ADAM-13000-DROPOUT-NOV17'
+
 NUM_WORKERS = 0
 EPOCHS = 50
 #DEBUG = True
@@ -36,14 +39,16 @@ if os.path.isfile(init_params_file):
     params = pickle.load(open(init_params_file, 'rb'))
 
     LR = params['LR']
+    WEIGHT_DECAY = params['WEIGHT_DECAY']
+    GRAD_CLIP = params['GRAD_CLIP']
+    RNN_DROPOUT = params['RNN_DROPOUT']
+    CNN_DROPOUT = params['CNN_DROPOUT']
+    
     VOCAB_SIZE = params['VOCAB_SIZE']
     NO_WORD_EMBEDDINGS = params['NO_WORD_EMBEDDINGS']
     HIDDEN_SIZE = params['HIDDEN_SIZE']
     BATCH_SIZE = params['BATCH_SIZE']
     NUM_LAYERS = params['NUM_LAYERS']
-    WEIGHT_DECAY = params['WEIGHT_DECAY']
-    RNN_DROPOUT = params['RNN_DROPOUT']
-    CNN_DROPOUT = params['CNN_DROPOUT']
     ADAM_FLAG = params['ADAM_FLAG']
 
     train_imagepaths_and_captions = params['train_imagepaths_and_captions']
@@ -69,11 +74,11 @@ else:
     LR = 0.0001
     WEIGHT_DECAY = 0.0001
     GRAD_CLIP = 5.0
-    RNN_DROPOUT = 0.5
-    CNN_DROPOUT = 0.5
+    RNN_DROPOUT = 0
+    CNN_DROPOUT = 0
 
-    VOCAB_SIZE = 13000 + 3
-    NO_WORD_EMBEDDINGS = 512
+    VOCAB_SIZE = 17000 + 3
+    NO_WORD_EMBEDDINGS = 300
     HIDDEN_SIZE = 512
     BATCH_SIZE = 128
     NUM_LAYERS = 1
@@ -81,10 +86,11 @@ else:
 
 
     train_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.train'
-    val_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.val'
+    val_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.newval'
     pretrained_cnn_file = '../pre_trained/resnet101-5d3b4d8f.pth'
-#    pretrained_word_embeddings_file = '../preprocessed_data/embeddings'
-    pretrained_word_embeddings_file = None
+#    pretrained_word_embeddings_file = None
+    pretrained_word_embeddings_file = '../preprocessed_data/embeddings'
+#    val_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.val'
 
 
     transform_train = transforms.Compose([
@@ -112,7 +118,7 @@ else:
               'val_imagepaths_and_captions': val_imagepaths_and_captions, 'pretrained_cnn_file': pretrained_cnn_file,
               'pretrained_word_embeddings_file': pretrained_word_embeddings_file, 'transform_train': transform_train, 
               'transform_val': transform_val, 'WEIGHT_DECAY': WEIGHT_DECAY, 'ADAM_FLAG': ADAM_FLAG, 'RNN_DROPOUT':RNN_DROPOUT,
-              'CNN_DROPOUT': CNN_DROPOUT}
+              'CNN_DROPOUT': CNN_DROPOUT, 'GRAD_CLIP': GRAD_CLIP}
 
 
     print('Initializing models...')
@@ -166,8 +172,8 @@ trainset = MSCOCO(VOCAB_SIZE, train_imagepaths_and_captions, transform_train)
 trainloader = torch.utils.data.DataLoader(dataset=trainset, batch_size=BATCH_SIZE, collate_fn=collate_fn,
                                           shuffle=True, drop_last=False, num_workers=NUM_WORKERS)
 
-valset = MSCOCO(VOCAB_SIZE, val_imagepaths_and_captions, transform_val)
-valloader = torch.utils.data.DataLoader(dataset=valset, batch_size=BATCH_SIZE, collate_fn=collate_fn, 
+valset = MSCOCO_VAL(VOCAB_SIZE, val_imagepaths_and_captions, transform_val)
+valloader = torch.utils.data.DataLoader(dataset=valset, batch_size=BATCH_SIZE, collate_fn=collate_fn_val,
                                         shuffle=False, drop_last=False, num_workers=NUM_WORKERS)
 writer = SummaryWriter(log_dir)
 for epoch in range(current_epoch, EPOCHS+1):
@@ -195,7 +201,7 @@ for epoch in range(current_epoch, EPOCHS+1):
         generated_captions = decoder(image_embeddings, captions[:, :-1], lengths)
 
         loss = criterion(generated_captions, targets)
-        trainloss += loss
+        trainloss += loss.item()
 
         loss.backward()
         
@@ -235,25 +241,40 @@ for epoch in range(current_epoch, EPOCHS+1):
         encoder.eval()
         decoder.eval()
         valloss = 0.0
-        for batch_idx, (images, captions, lengths) in enumerate(valloader, 1):
-
+        counts = 0
+        bleus = np.array([0.0, 0.0, 0.0, 0.0])
+        for images, captions_calc_bleu, captions_calc_loss, lengths, image_ids in valloader:
             images = images.cuda()
-            captions = captions.cuda()
-            lengths = lengths.cuda()
-            lengths -= 1
-            targets = rnn_utils.pack_padded_sequence(captions[:, 1:], lengths, batch_first=True)[0]
-
             image_embeddings = encoder(images)
-            generated_captions = decoder(image_embeddings, captions[:, :-1], lengths)
-    
-            loss = criterion(generated_captions, targets)
-    
-            valloss += loss
-    
+            generated_captions_calc_bleu, probs = decoder.beam_search_generator_v2(image_embeddings)
+
+            for idx in range(images.size(0)):
+                captions_calc_loss_one_image = captions_calc_loss[idx].cuda()
+                captions_calc_bleu_one_image = captions_calc_bleu[idx]
+                captions_lengths_one_image = lengths[idx].cuda() - 1
+
+                # calc loss
+                targets_one_image = rnn_utils.pack_padded_sequence(captions_calc_loss_one_image[:, 1:],
+                                                                   captions_lengths_one_image, batch_first=True)[0]
+                no_captions_per_image = captions_calc_loss_one_image.size(0)
+                generated_captions_calc_loss = decoder(image_embeddings[[idx]*no_captions_per_image],
+                                                       captions_calc_loss_one_image[:, :-1], 
+                                                       captions_lengths_one_image)
+                loss = criterion(generated_captions_calc_loss, targets_one_image)
+                valloss += loss.item()
+                
+                # calc bleus
+                captions_calc_bleu_one_image = [each.tolist()[1:-1] for each in captions_calc_bleu_one_image]
+                for n_gram in range(bleus.shape[0]):
+                    bleus[n_gram] += bleu_score(n_gram, captions_calc_bleu_one_image, generated_captions_calc_bleu[idx][1:-1])
+
+                counts += 1
+
+
             if DEBUG:
                 break
-        valloss /= batch_idx
-
+        valloss /= counts
+        bleus /= counts
 
     time_used_epoch = time.time() - start_time_epoch
     time_used_global += time_used_epoch

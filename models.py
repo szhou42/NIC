@@ -230,11 +230,10 @@ class RNN(nn.Module):
 
             word_embeddings_image_idx = self.word_embeddings(torch.tensor(top_k_idx).cuda()).view(beam_width, 1, -1)
 
-            h_temp = torch.ones((1, beam_width, 512)).cuda()
-            c_temp = torch.ones((1, beam_width, 512)).cuda()
-            h_temp[:] = h_image_idx.clone()
-            c_temp[:] = c_image_idx.clone()
-            h_image_idx, c_image_idx = h_temp, c_temp
+
+            h_image_idx = h_image_idx[:, [0]*beam_width, :]
+            c_image_idx = c_image_idx[:, [0]*beam_width, :]
+
 
             for i in range(max_caption_length):
     
@@ -286,12 +285,13 @@ class RNN(nn.Module):
                 word_embeddings_image_idx = self.word_embeddings(next_top_k_idx).view(beam_width, 1, -1)
 
 
-            # Convert word indices to actual words
             if show_all:
-                output_captions_one_batch.append([list(self.decode_idx2word(top_k_seq[i])) for i in range(beam_width)])
+#                output_captions_one_batch.append([list(self.decode_idx2word(top_k_seq[i])) for i in range(beam_width)])
+                output_captions_one_batch.append(top_k_seq)
                 output_scores_one_batch.append(top_k_scores.exp().view(-1).tolist())
             else:
-                output_captions_one_batch.append(list(self.decode_idx2word(top_k_seq[0])))
+#                output_captions_one_batch.append(list(self.decode_idx2word(top_k_seq[0])))
+                output_captions_one_batch.append(top_k_seq[0])
                 output_scores_one_batch.append(top_k_scores[0].exp().view(-1).tolist())
 
         return output_captions_one_batch, output_scores_one_batch

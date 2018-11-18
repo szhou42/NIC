@@ -18,8 +18,8 @@ from pycocotools.coco import COCO
 
 vocab_size = 17000
 
-caption_file, image_dir = ['../data/annotations/captions_train2017.json', '../data/train2017/']
-#caption_file, image_dir = ['../data/annotations/captions_val2017.json', '../data/val2017/']
+#caption_file, image_dir = ['../data/annotations/captions_train2017.json', '../data/train2017/']
+caption_file, image_dir = ['../data/annotations/captions_val2017.json', '../data/val2017/']
 
 GloVe_embeddings_file = '../pre_trained/glove.840B.300d.txt'
 
@@ -191,7 +191,7 @@ transform_val = transforms.Compose([
     Each list element is a tuple like this: ("val2017/dog.jpg", [[21,11,111,33,66], [111,22,233,11,66], [88,22,111,11,66]])
 '''
 
-def generate_imagepaths_captions_val(imagepaths_and_captions, imagepaths_and_captions_val):
+def generate_imagepaths_captions_for_eval(imagepaths_and_captions, imagepaths_and_captions_val):
     imagepaths_captions = pickle.load(open(imagepaths_and_captions, 'rb'))
     image_list = [] 
     imagepath2idx = {}
@@ -201,13 +201,16 @@ def generate_imagepaths_captions_val(imagepaths_and_captions, imagepaths_and_cap
         imagepath_and_caption = imagepaths_captions[caption_id]
         image_path = imagepath_and_caption['image_path']
         caption = imagepath_and_caption['caption']
+        image_id = imagepath_and_caption['image_id']
 
         if image_path in imagepath2idx:
             image_idx = imagepath2idx[image_path]
             t = image_list[image_idx] 
             t[1].append(caption)
         else:
-            image_list.append((image_path, [caption]))
+            image_list.append((image_path, [caption], image_id))
+            imagepath2idx[image_path] = idx
+            idx = idx + 1
 
     pickle.dump(image_list, open(imagepaths_and_captions_val, 'wb'))
 
@@ -220,7 +223,7 @@ def cal_mean_std(image_dir, transform=transform_val):
         image = Image.open(image_path).convert('RGB')
         image = transform(image)
         
-        summation += image.sum(dim=(1,2))
+        summation += image.sum(dim=(1, 2))
         
         if count % 1000 == 0:
             print(count)
@@ -243,4 +246,5 @@ def cal_mean_std(image_dir, transform=transform_val):
 
     return mean, std
 
-generate_imagepaths_captions_val('../preprocessed_data/imagepaths_captions.val', '../preprocessed_data/imagepaths_captions.newval')
+generate_imagepaths_captions_for_eval('../preprocessed_data/imagepaths_captions.val', 
+                                      '../preprocessed_data/imagepaths_captions.newval')
