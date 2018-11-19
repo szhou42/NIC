@@ -286,12 +286,12 @@ class RNN(nn.Module):
 
 
             if show_all:
-#                output_captions_one_batch.append([list(self.decode_idx2word(top_k_seq[i])) for i in range(beam_width)])
-                output_captions_one_batch.append(top_k_seq)
+                output_captions_one_batch.append([list(self.decode_idx2word(top_k_seq[i])) for i in range(beam_width)])
+#                output_captions_one_batch.append(top_k_seq)
                 output_scores_one_batch.append(top_k_scores.exp().view(-1).tolist())
             else:
-#                output_captions_one_batch.append(list(self.decode_idx2word(top_k_seq[0])))
-                output_captions_one_batch.append(top_k_seq[0])
+                output_captions_one_batch.append(list(self.decode_idx2word(top_k_seq[0])))
+#                output_captions_one_batch.append(top_k_seq[0])
                 output_scores_one_batch.append(top_k_scores[0].exp().view(-1).tolist())
 
         return output_captions_one_batch, output_scores_one_batch

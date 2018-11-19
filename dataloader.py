@@ -56,7 +56,7 @@ def collate_fn_val(batch):
     batch.sort(key=lambda image_caption: len(image_caption[1]), reverse=True)
     images, captions_calc_bleu, image_ids = zip(*batch)
     images = torch.stack(images)
-    
+
     captions_calc_loss = []
     lengths = []
     for i in range(len(captions_calc_bleu)):

@@ -5,11 +5,12 @@ Created in Oct 2018
 """
 
 import torch
+import subprocess
 import numpy as np
 from PIL import Image
 from torchvision import transforms
 from skimage import io
-from nltk.translate.bleu_score import sentence_bleu
+#from nltk.translate.bleu_score import sentence_bleu
 
 def save_model(model_name, model_dir, epoch, batch_step_count, time_used_global, optimizer, encoder, decoder):
    state = {
@@ -71,13 +72,25 @@ def generate_caption(encoder, decoder, transform_val):
     return caption
     
 
+def calc_and_save_metrics(resulting_captions_file, true_captions_file, writer, epoch):
+    p = subprocess.Popen(['python2.7', 'calc_metrics.py', resulting_captions_file, true_captions_file], 
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    stdout = p.stdout.read()
+    metrics = [each.split(': ') for each in str(stdout).split('\\n')[:-1][-7:]]
+    print(metrics)
+    for each_metric in metrics:
+        writer.add_scalar('epoch/'+each_metric[0], float(each_metric[1]), epoch)
+
+
+
 '''
 bleu score, specify which BLEU scores to use (e.g type can be 1,2,3, or 4)
 predicted_sentences is a list of sentences
 true_sentences is also a list of sentences
-'''
+
 def bleu_score(ngram, true_sentences, predicted_sentence):
     weights = [(1, 0, 0, 0), (0.5, 0.5, 0,0), (0.33, 0.33, 0.33), (0.25, 0.25, 0.25, 0.25)]
     weight = weights[ngram]
     score = sentence_bleu(true_sentences, predicted_sentence, weights = weight)
     return score
+'''

@@ -6,8 +6,8 @@ Created in Oct 2018
 import os
 import sys
 import time
+import json
 import pickle
-import numpy as np
 from tensorboardX import SummaryWriter
 
 import torch
@@ -17,18 +17,27 @@ import torch.optim as optim
 from torchvision import transforms
 
 from models import CNN, RNN
-from utils import save_model, load_model, bleu_score
+from utils import save_model, load_model, calc_and_save_metrics
 from dataloader import MSCOCO, collate_fn, MSCOCO_VAL, collate_fn_val
 
 MODEL_NAME = sys.argv[1]
-#MODEL_NAME = 'SGD-17000-NOV10'
-#MODEL_NAME = 'ADAM-13000-NOAVGPOOL-NOV15'
-#MODEL_NAME = 'ADAM-13000-DROPOUT-NOV17'
+#MODEL_NAME = 'ADAM-13000-BNTRAIN-NOV15'
 
-NUM_WORKERS = 0
+NUM_WORKERS = 8
 EPOCHS = 50
 #DEBUG = True
 DEBUG = False
+
+model_dir = '../saved_model/' + MODEL_NAME + '/'
+log_dir = '../logs/' + MODEL_NAME + '/'
+resulting_captions_dir = '../data/results/' + MODEL_NAME + '/'
+val_true_captions_file = '../data/annotations/captions_val2017.json'
+if not os.path.isdir(model_dir):
+    os.mkdir(model_dir)
+if not os.path.isdir(log_dir):
+    os.mkdir(log_dir)
+if not os.path.isdir(resulting_captions_dir):
+    os.mkdir(resulting_captions_dir)
 
 print(MODEL_NAME, 'starts running!')
 
@@ -38,18 +47,18 @@ if os.path.isfile(init_params_file):
     print('Loading params...')
     params = pickle.load(open(init_params_file, 'rb'))
 
-    LR = params['LR']
-    WEIGHT_DECAY = params['WEIGHT_DECAY']
-    GRAD_CLIP = params['GRAD_CLIP']
-    RNN_DROPOUT = params['RNN_DROPOUT']
-    CNN_DROPOUT = params['CNN_DROPOUT']
+    LR = params.get('LR', 0.0001)
+    WEIGHT_DECAY = params.get('WEIGHT_DECAY', 0.0001)
+    GRAD_CLIP = params.get('GRAD_CLIP', 5.0)
+    RNN_DROPOUT = params.get('RNN_DROPOUT', 0.5)
+    CNN_DROPOUT = params.get('CNN_DROPOUT', 0.5)
     
-    VOCAB_SIZE = params['VOCAB_SIZE']
-    NO_WORD_EMBEDDINGS = params['NO_WORD_EMBEDDINGS']
-    HIDDEN_SIZE = params['HIDDEN_SIZE']
-    BATCH_SIZE = params['BATCH_SIZE']
-    NUM_LAYERS = params['NUM_LAYERS']
-    ADAM_FLAG = params['ADAM_FLAG']
+    VOCAB_SIZE = params.get('VOCAB_SIZE', 13000+3)
+    NO_WORD_EMBEDDINGS = params.get('NO_WORD_EMBEDDINGS', 512)
+    HIDDEN_SIZE = params.get('HIDDEN_SIZE', 512)
+    BATCH_SIZE = params.get('BATCH_SIZE', 128)
+    NUM_LAYERS = params.get('NUM_LAYERS', 1)
+    ADAM_FLAG = params.get('ADAM_FLAG', True)
 
     train_imagepaths_and_captions = params['train_imagepaths_and_captions']
     val_imagepaths_and_captions = params['val_imagepaths_and_captions']
@@ -74,11 +83,11 @@ else:
     LR = 0.0001
     WEIGHT_DECAY = 0.0001
     GRAD_CLIP = 5.0
-    RNN_DROPOUT = 0
-    CNN_DROPOUT = 0
+    RNN_DROPOUT = 0.5
+    CNN_DROPOUT = 0.5
 
-    VOCAB_SIZE = 17000 + 3
-    NO_WORD_EMBEDDINGS = 300
+    VOCAB_SIZE = 13000 + 3
+    NO_WORD_EMBEDDINGS = 512
     HIDDEN_SIZE = 512
     BATCH_SIZE = 128
     NUM_LAYERS = 1
@@ -88,9 +97,9 @@ else:
     train_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.train'
     val_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.newval'
     pretrained_cnn_file = '../pre_trained/resnet101-5d3b4d8f.pth'
-#    pretrained_word_embeddings_file = None
-    pretrained_word_embeddings_file = '../preprocessed_data/embeddings'
-#    val_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.val'
+    pretrained_word_embeddings_file = None
+#    pretrained_word_embeddings_file = '../preprocessed_data/embeddings'
+#    val_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.val
 
 
     transform_train = transforms.Compose([
@@ -138,13 +147,6 @@ else:
 
     pickle.dump(params, open(init_params_file, 'wb'))
 
-
-model_dir = '../saved_model/' + MODEL_NAME + '/'
-log_dir = '../logs/' + MODEL_NAME + '/'
-if not os.path.isdir(model_dir):
-    os.mkdir(model_dir)
-if not os.path.isdir(log_dir):
-    os.mkdir(log_dir)
 
 # initialize accumulators.
 current_epoch = 1
@@ -237,12 +239,12 @@ for epoch in range(current_epoch, EPOCHS+1):
     trainloss /= batch_idx
 
     print('[%d] epoch starts validating...'%epoch)
+    resulting_captions = []
+    valloss = 0.0
+    counts = 0
     with torch.no_grad():
         encoder.eval()
         decoder.eval()
-        valloss = 0.0
-        counts = 0
-        bleus = np.array([0.0, 0.0, 0.0, 0.0])
         for images, captions_calc_bleu, captions_calc_loss, lengths, image_ids in valloader:
             images = images.cuda()
             image_embeddings = encoder(images)
@@ -263,18 +265,27 @@ for epoch in range(current_epoch, EPOCHS+1):
                 loss = criterion(generated_captions_calc_loss, targets_one_image)
                 valloss += loss.item()
                 
-                # calc bleus
-                captions_calc_bleu_one_image = [each.tolist()[1:-1] for each in captions_calc_bleu_one_image]
-                for n_gram in range(bleus.shape[0]):
-                    bleus[n_gram] += bleu_score(n_gram, captions_calc_bleu_one_image, generated_captions_calc_bleu[idx][1:-1])
+                # prepare json file for calculating bleus
+
+                generated_caption = (' '.join(generated_captions_calc_bleu[idx][1:-1]))
+                if generated_caption[-1] == '.' and generated_caption[-2] == ' ':
+                    generated_caption = generated_caption[:-2] + generated_caption[-1]
+                elif generated_caption[-1] != '.':
+                    generated_caption = generated_caption + '.'
+                resulting_captions.append({'image_id': image_ids[idx], 'caption': generated_caption})
 
                 counts += 1
 
-
             if DEBUG:
                 break
-        valloss /= counts
-        bleus /= counts
+    
+    valloss /= counts
+    resulting_captions_file = resulting_captions_dir + MODEL_NAME + str(epoch) + '.json'
+    with open(resulting_captions_file, 'w') as f:
+        json.dump(resulting_captions, f)
+        
+    calc_and_save_metrics(resulting_captions_file, val_true_captions_file, writer, epoch)
+
 
     time_used_epoch = time.time() - start_time_epoch
     time_used_global += time_used_epoch
