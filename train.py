@@ -61,7 +61,8 @@ if os.path.isfile(init_params_file):
     ADAM_FLAG = params.get('ADAM_FLAG', True)
 
     train_imagepaths_and_captions = params['train_imagepaths_and_captions']
-    val_imagepaths_and_captions = params['val_imagepaths_and_captions']
+#    val_imagepaths_and_captions = params['val_imagepaths_and_captions']
+    val_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.newval'
     pretrained_cnn_file = params['pretrained_cnn_file']
     pretrained_word_embeddings_file = params['pretrained_word_embeddings_file']
 
@@ -280,7 +281,7 @@ for epoch in range(current_epoch, EPOCHS+1):
                 break
     
     valloss /= counts
-    resulting_captions_file = resulting_captions_dir + MODEL_NAME + str(epoch) + '.json'
+    resulting_captions_file = resulting_captions_dir + MODEL_NAME + '_' + str(epoch) + '.json'
     with open(resulting_captions_file, 'w') as f:
         json.dump(resulting_captions, f)
         
