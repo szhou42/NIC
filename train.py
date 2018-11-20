@@ -21,7 +21,7 @@ from utils import save_model, load_model, calc_and_save_metrics
 from dataloader import MSCOCO, collate_fn, MSCOCO_VAL, collate_fn_val
 
 MODEL_NAME = sys.argv[1]
-#MODEL_NAME = 'ADAM-13000-BNTRAIN-NOV15'
+#MODEL_NAME = 'ADAM-13000-DROPOUT-NOV19'
 
 NUM_WORKERS = 8
 EPOCHS = 50
@@ -39,8 +39,8 @@ if not os.path.isdir(log_dir):
 if not os.path.isdir(resulting_captions_dir):
     os.mkdir(resulting_captions_dir)
 
-print(MODEL_NAME, 'starts running!')
 
+print(MODEL_NAME, 'starts running!')
 init_params_file = '../model_params/' + MODEL_NAME
 if os.path.isfile(init_params_file):
     # if resume training, load hypermeters.
@@ -50,8 +50,8 @@ if os.path.isfile(init_params_file):
     LR = params.get('LR', 0.0001)
     WEIGHT_DECAY = params.get('WEIGHT_DECAY', 0.0001)
     GRAD_CLIP = params.get('GRAD_CLIP', 5.0)
-    RNN_DROPOUT = params.get('RNN_DROPOUT', 0.5)
-    CNN_DROPOUT = params.get('CNN_DROPOUT', 0.5)
+    RNN_DROPOUT = params.get('RNN_DROPOUT', 0)
+    CNN_DROPOUT = params.get('CNN_DROPOUT', 0)
     
     VOCAB_SIZE = params.get('VOCAB_SIZE', 13000+3)
     NO_WORD_EMBEDDINGS = params.get('NO_WORD_EMBEDDINGS', 512)
@@ -181,7 +181,7 @@ valloader = torch.utils.data.DataLoader(dataset=valset, batch_size=BATCH_SIZE, c
 writer = SummaryWriter(log_dir)
 for epoch in range(current_epoch, EPOCHS+1):
     start_time_epoch = time.time()
-    encoder.train() # to get BN layers work normally.
+    encoder.train()
     decoder.train()
 
     print('[%d] epoch starts training...'%epoch)
@@ -198,7 +198,7 @@ for epoch in range(current_epoch, EPOCHS+1):
         
         encoder.zero_grad()
         decoder.zero_grad()
-        
+    
         image_embeddings = encoder(images)
         # throw out the end word key when doing forward propagation.
         generated_captions = decoder(image_embeddings, captions[:, :-1], lengths)
@@ -228,8 +228,8 @@ for epoch in range(current_epoch, EPOCHS+1):
                         state['step'] = 1000
 
         optimizer.step()
-        
-        if batch_idx % 50 == 0:
+
+        if batch_idx % 100 == 0:
             writer.add_scalar('batch/training_loss', loss, batch_step_count)
             batch_step_count += 1
             print('[%d] epoch, [%d] batch, [%.4f] loss, [%.2f] min used.'
@@ -238,6 +238,10 @@ for epoch in range(current_epoch, EPOCHS+1):
         if DEBUG:
             break
     trainloss /= batch_idx
+
+    if epoch % checkpoint == 0:
+        print('Saving model!')
+        save_model(MODEL_NAME, model_dir, epoch, batch_step_count, time_used_global, optimizer, encoder, decoder)
 
     print('[%d] epoch starts validating...'%epoch)
     resulting_captions = []
@@ -265,7 +269,7 @@ for epoch in range(current_epoch, EPOCHS+1):
                                                        captions_lengths_one_image)
                 loss = criterion(generated_captions_calc_loss, targets_one_image)
                 valloss += loss.item()
-                
+
                 # prepare json file for calculating bleus
 
                 generated_caption = (' '.join(generated_captions_calc_bleu[idx][1:-1]))
@@ -276,6 +280,8 @@ for epoch in range(current_epoch, EPOCHS+1):
                 resulting_captions.append({'image_id': image_ids[idx], 'caption': generated_caption})
 
                 counts += 1
+                if counts % 1000 == 0:
+                    print('Validation %.2f %% finished.'%(counts/500*20))
 
             if DEBUG:
                 break
@@ -297,10 +303,7 @@ for epoch in range(current_epoch, EPOCHS+1):
     print('[%d] epoch has finished. [%.4f] training loss, [%.4f] validation loss, [%.2f] min used this epoch, [%.2f] hours used in total'
           %(epoch, trainloss, valloss, time_used_epoch/60, time_used_global/3600))
 
-    if epoch % checkpoint == 0:
-        print('Saving model!')
-        save_model(MODEL_NAME, model_dir, epoch, batch_step_count, time_used_global, optimizer, encoder, decoder)
-        
+
     if DEBUG:
         break
 

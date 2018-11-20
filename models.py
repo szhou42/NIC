@@ -59,6 +59,7 @@ class RNN(nn.Module):
         super(RNN, self).__init__()
         
         self.id2word = np.array(pickle.load(open('../preprocessed_data/idx2word', 'rb')))
+        self.hidden_size = hidden_size
         
         if pre_trained_file is not None:
             pretrained_word_embeddings = torch.from_numpy(pickle.load(open(pre_trained_file, 'rb')).astype(np.float32)).cuda()
@@ -221,7 +222,7 @@ class RNN(nn.Module):
             word_embeddings_image_idx = self.word_embeddings(torch.tensor(STKidx).cuda()).view(1, 1, -1)
             _, (h_image_idx, c_image_idx) = self.lstm(word_embeddings_image_idx, (h_image_idx, c_image_idx))
 
-            output_seq_idx = self.fc_output(h_image_idx).view(1, -1)
+            output_seq_idx = self.fc_output(h_image_idx.view(-1, self.hidden_size)).view(1, -1)
             softmax_output = self.softmax_v2(output_seq_idx)
             top_k_prob, top_k_idx = softmax_output.topk(beam_width)
 
@@ -238,7 +239,7 @@ class RNN(nn.Module):
             for i in range(max_caption_length):
     
                 _, (h_image_idx, c_image_idx) = self.lstm(word_embeddings_image_idx, (h_image_idx, c_image_idx))
-                output_seq_idx = self.fc_output(h_image_idx.view(beam_width, 1, 512)).view(beam_width, -1)
+                output_seq_idx = self.fc_output(h_image_idx.view(beam_width, self.hidden_size)).view(beam_width, -1)
                 
                 softmax_output = self.softmax_v2(output_seq_idx)
                 next_top_k_prob, next_top_k_idx = softmax_output.topk(beam_width)
