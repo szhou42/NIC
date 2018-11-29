@@ -63,7 +63,7 @@ if os.path.isfile(init_params_file):
     train_imagepaths_and_captions = params['train_imagepaths_and_captions']
 #    val_imagepaths_and_captions = params['val_imagepaths_and_captions']
     val_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.newval'
-    pretrained_cnn_file = params['pretrained_cnn_file']
+    pretrained_cnn_dir = params.get('pretrained_cnn_dir', '../pre_trained/')
     pretrained_word_embeddings_file = params['pretrained_word_embeddings_file']
 
     transform_train = params['transform_train']
@@ -84,8 +84,8 @@ else:
     LR = 0.0001
     WEIGHT_DECAY = 0.0001
     GRAD_CLIP = 5.0
-    RNN_DROPOUT = 0.5
-    CNN_DROPOUT = 0.5
+    RNN_DROPOUT = 0
+    CNN_DROPOUT = 0
 
     VOCAB_SIZE = 13000 + 3
     NO_WORD_EMBEDDINGS = 512
@@ -97,7 +97,7 @@ else:
 
     train_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.train'
     val_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.newval'
-    pretrained_cnn_file = '../pre_trained/resnet101-5d3b4d8f.pth'
+    pretrained_cnn_dir = '../pre_trained/'
     pretrained_word_embeddings_file = None
 #    pretrained_word_embeddings_file = '../preprocessed_data/embeddings'
 #    val_imagepaths_and_captions = '../preprocessed_data/imagepaths_captions.val
@@ -125,14 +125,14 @@ else:
 
     params = {'LR': LR, 'VOCAB_SIZE': VOCAB_SIZE, 'NO_WORD_EMBEDDINGS': NO_WORD_EMBEDDINGS, 'HIDDEN_SIZE': HIDDEN_SIZE,
               'BATCH_SIZE': BATCH_SIZE, 'NUM_LAYERS': NUM_LAYERS, 'train_imagepaths_and_captions': train_imagepaths_and_captions,
-              'val_imagepaths_and_captions': val_imagepaths_and_captions, 'pretrained_cnn_file': pretrained_cnn_file,
+              'val_imagepaths_and_captions': val_imagepaths_and_captions, 'pretrained_cnn_dir': pretrained_cnn_dir,
               'pretrained_word_embeddings_file': pretrained_word_embeddings_file, 'transform_train': transform_train, 
               'transform_val': transform_val, 'WEIGHT_DECAY': WEIGHT_DECAY, 'ADAM_FLAG': ADAM_FLAG, 'RNN_DROPOUT':RNN_DROPOUT,
               'CNN_DROPOUT': CNN_DROPOUT, 'GRAD_CLIP': GRAD_CLIP}
 
 
     print('Initializing models...')
-    encoder = CNN(NO_WORD_EMBEDDINGS, pretrained_cnn_file, freeze=True, dropout_prob=CNN_DROPOUT)
+    encoder = CNN(NO_WORD_EMBEDDINGS, pretrained_cnn_dir, freeze=True, dropout_prob=CNN_DROPOUT, model_name='resnet152')
     decoder = RNN(VOCAB_SIZE, NO_WORD_EMBEDDINGS, hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS,
                   pre_trained_file=pretrained_word_embeddings_file, freeze=False, dropout_prob=RNN_DROPOUT)
     params['encoder'] = encoder
@@ -167,6 +167,17 @@ if model_list:
     current_epoch = state['epoch'] + 1
     time_used_global = state['time_used_global']
     batch_step_count = state['batch_step_count']
+
+for group in optimizer.param_groups:
+    group['lr'] = 0.0000001
+    group['weight_decay'] = 0.0
+
+for param in encoder.parameters():
+    param.requires_grad_(requires_grad=True)
+
+BATCH_SIZE = 16
+
+print('LR --> 0.0000001, WD = 0.0. Resume fine-tuning CNN.')
 
 criterion = nn.CrossEntropyLoss()
 
@@ -214,7 +225,7 @@ for epoch in range(current_epoch, EPOCHS+1):
                 for p in group['params']:
                     if p.grad is not None:
                         p.grad.data.clamp_(-GRAD_CLIP, GRAD_CLIP)
-                    
+
                     if ADAM_FLAG:
                         state = optimizer.state[p]
                         if('step' in state and state['step']>=1024):
@@ -281,11 +292,11 @@ for epoch in range(current_epoch, EPOCHS+1):
 
                 counts += 1
                 if counts % 1000 == 0:
-                    print('Validation %.2f %% finished.'%(counts/500*20))
+                    print('Validation %.2f %% finished.'%(counts/1000*20))
 
             if DEBUG:
                 break
-    
+
     valloss /= counts
     resulting_captions_file = resulting_captions_dir + MODEL_NAME + '_' + str(epoch) + '.json'
     with open(resulting_captions_file, 'w') as f:

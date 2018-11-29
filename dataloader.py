@@ -4,6 +4,7 @@ Created in Oct 2018
 
 """
 
+from pycocotools.coco import COCO
 
 import pickle
 from PIL import Image
@@ -92,6 +93,28 @@ class MSCOCO_VAL(torch.utils.data.Dataset):
         image = self.transform(image)
 
         return image, captions, image_id
+    
+    def __len__(self):
+        return len(self.image_list)
+
+
+class MSCOCO_TEST(torch.utils.data.Dataset):
+
+    def __init__(self, test_json, transform, test_dir):
+        coco = COCO(test_json)
+        self.image_list = list(coco.imgs.values())
+        self.test_dir = test_dir
+
+        self.transform = transform
+
+    def __getitem__(self, index):  
+        image_path = self.test_dir + self.image_list[index]['file_name']
+        image_id = self.image_list[index]['id']
+            
+        image = Image.open(image_path).convert('RGB')
+        image = self.transform(image)
+
+        return image, image_id
     
     def __len__(self):
         return len(self.image_list)

@@ -23,4 +23,4 @@ This repo is to reimplement the show and tell paper.
 	* Google open source parameter settings of the NIC, in tensorflow:
 		* [Github link](https://github.com/tensorflow/models/blob/master/research/im2txt/im2txt/configuration.py)
 * Train one week!
-
+* Dropout + ResNet152 + RandomCrop + TrainLastBottleneck + LSTM/GRU

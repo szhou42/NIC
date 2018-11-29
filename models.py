@@ -12,20 +12,25 @@ import torchvision
 import torch.nn.utils.rnn as rnn_utils
 from copy import deepcopy
 
-def resnet101(pre_trained_file, pretrained=True):
-    model = torchvision.models.resnet.ResNet(torchvision.models.resnet.Bottleneck, [3, 4, 23, 3])
+def resnet_loader(pre_trained_dir, model_name='resnet152', pretrained=True):
+    if model_name == 'resnet101':
+        model = torchvision.models.resnet.ResNet(torchvision.models.resnet.Bottleneck, [3, 4, 23, 3])
+    elif model_name == 'resnet152':
+        model = torchvision.models.resnet.ResNet(torchvision.models.resnet.Bottleneck, [3, 8, 36, 3])
+
     if pretrained:
-        state_dict = torch.load(open(pre_trained_file, 'rb'))
+        state_dict = torch.load(open(pre_trained_dir + model_name + '.pth', 'rb'))
         model.load_state_dict(state_dict)
+
     return model
 
 
 class CNN(nn.Module):
     
-    def __init__(self, no_word_embeddings, pre_train_dir, freeze, dropout_prob):
+    def __init__(self, no_word_embeddings, pre_train_dir, freeze, dropout_prob, model_name):
         super(CNN, self).__init__()
 
-        pretrained_cnn = resnet101(pre_train_dir, pretrained=True)
+        pretrained_cnn = resnet_loader(pre_train_dir, model_name, pretrained=True)
 
         self.resnet = nn.Sequential(*list(pretrained_cnn.children())[:-1])
         if freeze:
@@ -122,7 +127,7 @@ class RNN(nn.Module):
                 # Given last hidden state, cell state and Xi, obtain the next hidden state and cell state
                 _, (h_image_idx, c_image_idx) = self.lstm(word_embeddings_image_idx, (h_image_idx, c_image_idx))
                 # Output a vector of len = vocab_size 
-                output_seq_idx = self.fc_output(h_image_idx)
+                output_seq_idx = self.fc_output(h_image_idx.view(-1, self.hidden_size))
                 # Take the word index with biggest value
                 predicted_word_idx = torch.argmax(output_seq_idx).item()
                 if predicted_word_idx == EDKidx:
